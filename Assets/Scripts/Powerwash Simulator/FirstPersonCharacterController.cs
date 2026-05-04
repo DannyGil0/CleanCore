@@ -5,14 +5,14 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterController))]
 public class FirstPersonCharacterController : MonoBehaviour
 {
-	
+
 	[Header("Base Movement")]
 	[Tooltip("Movement speed of the character in m/s")]
 	public float MoveSpeed = 4.0f;
 	[Tooltip("Acceleration and deceleration")]
 	public float SpeedChangeRateAccelerate = 10.0f;
 	public float SpeedChangeRateDecelerate = 10.0f;
-	
+
 	[Header("Camera")]
 	[Tooltip("The follow target set in the Cinemachine Virtual Camera that the camera will follow")]
 	public Transform CameraContainer;
@@ -35,7 +35,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 	{
 		Cursor.lockState = CursorLockMode.Locked;
 		Cursor.visible = false;
-		
+
 		this._cameraPitch = ClampAngle(this.CameraContainer.localRotation.eulerAngles.x, this.BottomClamp, this.TopClamp);
 		this._cameraYaw = this.CalculateCameraYaw(this._transform.rotation);
 	}
@@ -49,10 +49,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
 	protected virtual void Update()
 	{
-		this.UpdateMovement();
-		this.UpdateManualRotation();
+		// this.UpdateMovement();
+		// this.UpdateManualRotation();
 	}
-	
+
 	private void UpdateMovement()
 	{
 		float targetSpeed = this.MoveSpeed;
@@ -67,8 +67,8 @@ public class FirstPersonCharacterController : MonoBehaviour
 		{
 			// creates curved result rather than a linear one giving a more organic speed change
 			this._speed = Mathf.Lerp(
-				currentSpeed, 
-				targetSpeed, 
+				currentSpeed,
+				targetSpeed,
 				Time.deltaTime * (targetSpeed > currentSpeed ? this.SpeedChangeRateAccelerate : this.SpeedChangeRateDecelerate)
 			);
 		}
@@ -79,7 +79,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 
 		this._speed = Mathf.Clamp(this._speed, 0, this.MoveSpeed);
 
-		
+
 		Vector3 movement = Physics.gravity * Time.deltaTime;
 		if (!Mathf.Approximately(this._speed, 0))
 		{
@@ -88,7 +88,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 			                         + rotation * Vector3.forward * Input.GetAxis("Vertical");
 			movement += inputDirection * (this._speed * Time.deltaTime);
 		}
-		
+
 		this._controller.Move(movement);
 	}
 
@@ -117,13 +117,13 @@ public class FirstPersonCharacterController : MonoBehaviour
 		// if (this._cameraInputSmoothing.Count > 0)
 		// 	deltaTime /= this._cameraInputSmoothing.Count;
 		float deltaTime = Time.deltaTime;
-		
+
 		float pitchInput = lookInput.y;
 		float yawInput = lookInput.x;
 		float speed = this.RotationSpeed * deltaTime;
-		
+
 		this.SetCameraRotation(
-			this._cameraPitch - pitchInput * speed,	
+			this._cameraPitch - pitchInput * speed,
 			this._cameraYaw + yawInput * speed
 		);
 	}
@@ -146,7 +146,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 	{
 		return yaw;
 	}
-	
+
 	protected float CalculateCameraPitch(Quaternion rotation)
 		=> rotation.eulerAngles.x;
 
@@ -159,5 +159,5 @@ public class FirstPersonCharacterController : MonoBehaviour
 		while (angle < -180) angle += 360;
 		return Mathf.Clamp(angle, min, max);
 	}
-	
+
 }
