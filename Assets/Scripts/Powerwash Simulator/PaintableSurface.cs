@@ -58,16 +58,48 @@ public class PaintableSurface : MonoBehaviour
     
     private void OnDestroy()
     {
-        if (this._hasSetup)
+        if (this._cmd != null)
+        {
+            CommandBufferPool.Release(this._cmd);
+            this._cmd = null;
+        }
+
+        ReleaseCoverageBuffers();
+
+        if (this._hasSetup && this._rt != null)
         {
             this._rt.Release();
             Destroy(this._rt);
+            this._rt = null;
         }
-        
+
+        this._hasSetup = false;
+
         foreach (KeyValuePair<Material, Material> kvp in this._materials)
             Destroy(kvp.Value);
+        this._materials.Clear();
+
         if (this._paintMaterial)
+        {
             Destroy(this._paintMaterial);
+            this._paintMaterial = null;
+        }
+    }
+
+    private void ReleaseCoverageBuffers()
+    {
+        if (this._coverageBuffers == null)
+            return;
+
+        for (int i = 0; i < this._coverageBuffers.Length; i++)
+        {
+            ComputeBuffer buffer = this._coverageBuffers[i];
+            if (buffer == null)
+                continue;
+            buffer.Release();
+            buffer.Dispose();
+            this._coverageBuffers[i] = null;
+        }
     }
 
 #if UNITY_EDITOR
