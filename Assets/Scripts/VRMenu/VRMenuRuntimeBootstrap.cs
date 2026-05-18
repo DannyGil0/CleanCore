@@ -1,34 +1,67 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Spawns the in-world VR menu at play time if it is missing from the scene.
-/// This was the original working path before hide-on-start was added.
+/// Spawns the in-world VR menu at play time and after every scene load (including LoadScene reloads).
 /// </summary>
 public static class VRMenuRuntimeBootstrap
 {
     const string PrefabResourcePath = "InWorldMenuVR";
 
+    static bool _sceneCallbackRegistered;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void RegisterSceneLoadedCallback()
+    {
+        if (_sceneCallbackRegistered)
+            return;
+
+        _sceneCallbackRegistered = true;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void OnAfterSceneLoad()
     {
-        Scene scene = SceneManager.GetActiveScene();
-        if (!scene.isLoaded || !scene.IsValid())
+        ScheduleEnsureMenu();
+    }
+
+    static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (!Application.isPlaying)
             return;
 
-        EnsureMenuInScene();
+        ScheduleEnsureMenu();
+    }
+
+    /// <summary>
+    /// Deferred so XR Origin / cameras exist after scene reload (LoadScene).
+    /// </summary>
+    public static void ScheduleEnsureMenu()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        var runner = new GameObject("VRMenuBootstrapRunner");
+        runner.hideFlags = HideFlags.HideAndDontSave;
+        runner.AddComponent<VRMenuBootstrapRunner>();
     }
 
     public static void EnsureMenuInScene()
     {
         InWorldMenuVR existing = Object.FindFirstObjectByType<InWorldMenuVR>();
-        if (existing != null)
+        if (existing != null && IsMenuHierarchyValid(existing))
         {
             VRMenuSceneServices.FinalizeMenu(existing.gameObject);
             existing.ShowMenuWhenReady();
             Debug.Log("[VRMenu] Menu existente en escena — referencias actualizadas.");
             return;
         }
+
+        if (existing != null)
+            Object.Destroy(existing.gameObject);
 
         VRMenuSceneServices.EnsureEventSystem();
 
@@ -54,5 +87,25 @@ public static class VRMenuRuntimeBootstrap
         {
             Debug.LogError("[VRMenu] Fallo al crear el menu. Revisa errores de compilacion en la consola.");
         }
+    }
+
+    static bool IsMenuHierarchyValid(InWorldMenuVR menu)
+    {
+        return menu != null && menu.transform.Find("MenuCanvas") != null;
+    }
+}
+
+/// <summary>
+/// Runs EnsureMenuInScene after the scene and XR rig have initialized.
+/// </summary>
+sealed class VRMenuBootstrapRunner : MonoBehaviour
+{
+    IEnumerator Start()
+    {
+        yield return null;
+        yield return null;
+
+        VRMenuRuntimeBootstrap.EnsureMenuInScene();
+        Destroy(gameObject);
     }
 }
