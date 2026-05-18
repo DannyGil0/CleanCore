@@ -288,14 +288,17 @@ public static class InWorldMenuVRBuilder
         help = helpRoot.AddComponent<HelpPanelController>();
         GameObject helpTextGo = CreateUIObject("HelpText", helpRoot.transform);
         StretchFull(helpTextGo.GetComponent<RectTransform>());
-        helpTextGo.GetComponent<RectTransform>().offsetMin = new Vector2(40, 40);
+        helpTextGo.GetComponent<RectTransform>().offsetMin = new Vector2(40, 100);
         helpTextGo.GetComponent<RectTransform>().offsetMax = new Vector2(-40, -40);
         TMP_Text helpText = helpTextGo.AddComponent<TextMeshProUGUI>();
         helpText.fontSize = 26;
         helpText.color = Color.white;
         helpText.alignment = TextAlignmentOptions.TopLeft;
+
+        Button btnHelpBack = CreateHelpBackButton(helpRoot.transform);
         SetPrivateField(help, "_panelRoot", helpRoot);
         SetPrivateField(help, "_bodyText", helpText);
+        SetPrivateField(help, "_backButton", btnHelpBack);
 
         // Modal
         modalRoot = CreateUIObject("ModalOverlay", canvasGo.transform);
@@ -388,6 +391,36 @@ public static class InWorldMenuVRBuilder
         slider.targetGraphic = handle.GetComponent<Image>();
 
         return slider;
+    }
+
+    static Button CreateHelpBackButton(Transform helpRoot)
+    {
+        GameObject go = CreateUIObject("BtnHelpBack", helpRoot);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 28f);
+        rt.sizeDelta = new Vector2(420f, 52f);
+
+        Image img = go.AddComponent<Image>();
+        img.color = BtnNormal;
+        Button btn = go.AddComponent<Button>();
+        ColorBlock colors = btn.colors;
+        colors.normalColor = BtnNormal;
+        colors.highlightedColor = BtnHighlight;
+        colors.pressedColor = BtnPressed;
+        colors.selectedColor = BtnHighlight;
+        btn.colors = colors;
+
+        GameObject textGo = CreateUIObject("Text", go.transform);
+        StretchFull(textGo.GetComponent<RectTransform>());
+        TMP_Text tmp = textGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = "VOLVER AL MENÚ";
+        tmp.fontSize = 24;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = TitleColor;
+        return btn;
     }
 
     static Button CreateMenuButton(Transform parent, string name, string label)

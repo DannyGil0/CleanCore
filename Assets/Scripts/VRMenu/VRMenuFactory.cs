@@ -98,7 +98,7 @@ public static class VRMenuFactory
         GameObject helpTextGo = CreateUIObject("HelpText", helpRoot.transform);
         var helpRect = helpTextGo.GetComponent<RectTransform>();
         StretchFull(helpRect);
-        helpRect.offsetMin = new Vector2(40, 40);
+        helpRect.offsetMin = new Vector2(40, 100);
         helpRect.offsetMax = new Vector2(-40, -40);
         TMP_Text helpText = helpTextGo.AddComponent<TextMeshProUGUI>();
         if (TMP_Settings.defaultFontAsset != null)
@@ -106,8 +106,10 @@ public static class VRMenuFactory
         helpText.fontSize = 26;
         helpText.color = Color.white;
         helpText.alignment = TextAlignmentOptions.TopLeft;
+
+        Button btnHelpBack = CreateHelpBackButton(helpRoot.transform);
         var help = helpRoot.AddComponent<HelpPanelController>();
-        help.Configure(helpRoot, helpText);
+        help.Configure(helpRoot, helpText, btnHelpBack);
 
         GameObject modalRoot = CreateUIObject("ModalOverlay", canvasGo.transform);
         StretchFull(modalRoot.GetComponent<RectTransform>());
@@ -196,10 +198,20 @@ public static class VRMenuFactory
         return slider;
     }
 
-    static Button CreateMenuButton(Transform parent, string name, string label)
+    static Button CreateHelpBackButton(Transform helpRoot)
     {
-        GameObject go = CreateUIObject(name, parent);
-        go.AddComponent<LayoutElement>().preferredHeight = 52;
+        GameObject go = CreateUIObject("BtnHelpBack", helpRoot);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 28f);
+        rt.sizeDelta = new Vector2(420f, 52f);
+        return CreateMenuButtonOnExisting(go, "VOLVER AL MENÚ");
+    }
+
+    static Button CreateMenuButtonOnExisting(GameObject go, string label)
+    {
         Image img = go.AddComponent<Image>();
         img.color = BtnNormal;
         Button btn = go.AddComponent<Button>();
@@ -220,6 +232,13 @@ public static class VRMenuFactory
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.color = TitleColor;
         return btn;
+    }
+
+    static Button CreateMenuButton(Transform parent, string name, string label)
+    {
+        GameObject go = CreateUIObject(name, parent);
+        go.AddComponent<LayoutElement>().preferredHeight = 52;
+        return CreateMenuButtonOnExisting(go, label);
     }
 
     static TMP_Text CreateTMP(string name, Transform parent, string text, float fontSize, FontStyles style,

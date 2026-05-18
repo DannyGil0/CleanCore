@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Toggleable help overlay for basic VR / cleaning controls.
@@ -8,6 +9,7 @@ public class HelpPanelController : MonoBehaviour
 {
     [SerializeField] private GameObject _panelRoot;
     [SerializeField] private TMP_Text _bodyText;
+    [SerializeField] private Button _backButton;
 
     private const string DefaultHelpText =
         "CONTROLES\n\n" +
@@ -21,28 +23,49 @@ public class HelpPanelController : MonoBehaviour
         "• CERRAR: ocultar menú\n" +
         "• Sliders: volumen ambiente y música\n" +
         "• Recenter: recentra la vista VR\n" +
-        "• Reiniciar: recarga la escena actual";
+        "• Reiniciar: recarga la escena actual\n\n" +
+        "Pulsa VOLVER AL MENÚ para cerrar esta pantalla.";
 
-    public void Configure(GameObject panelRoot, TMP_Text bodyText)
+    public void Configure(GameObject panelRoot, TMP_Text bodyText, Button backButton = null)
     {
         _panelRoot = panelRoot;
         _bodyText = bodyText;
+        _backButton = backButton;
         if (_bodyText != null && string.IsNullOrWhiteSpace(_bodyText.text))
             _bodyText.text = DefaultHelpText;
         if (_panelRoot != null)
             _panelRoot.SetActive(false);
+        WireBackButton();
     }
 
     private void Awake()
     {
-        if (_panelRoot == null || _bodyText == null)
-            return;
+        if (_panelRoot == null)
+            _panelRoot = gameObject;
 
         if (_bodyText != null && string.IsNullOrWhiteSpace(_bodyText.text))
             _bodyText.text = DefaultHelpText;
 
         if (_panelRoot != null)
             _panelRoot.SetActive(false);
+
+        WireBackButton();
+    }
+
+    public void WireBackButton()
+    {
+        if (_backButton == null && _panelRoot != null)
+        {
+            Transform back = _panelRoot.transform.Find("BtnHelpBack");
+            if (back != null)
+                _backButton = back.GetComponent<Button>();
+        }
+
+        if (_backButton == null)
+            return;
+
+        _backButton.onClick.RemoveListener(Hide);
+        _backButton.onClick.AddListener(Hide);
     }
 
     public void Show()

@@ -125,6 +125,9 @@ public static class VRMenuSceneServices
                 case "BtnExit": SetField(binder, "_btnExit", b); break;
             }
         }
+
+        HelpPanelController helpPanel = menuRoot.GetComponentInChildren<HelpPanelController>(true);
+        helpPanel?.WireBackButton();
     }
 
     static void SetField(object target, string fieldName, object value)
