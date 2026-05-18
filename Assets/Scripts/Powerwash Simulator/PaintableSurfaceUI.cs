@@ -8,6 +8,8 @@ public class PaintableSurfaceUI : MonoBehaviour
     [SerializeField, Scene] private PaintableSurface[] _surfaces;
     [SerializeField, Anywhere] private PaintableSurfaceUILineItem _lineItemPrefab;
 
+    public PaintableSurface[] Surfaces => _surfaces;
+
     private void Start()
     {
         for (int i = 0; i < this._surfaces.Length; i++)
