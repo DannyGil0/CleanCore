@@ -47,13 +47,14 @@ public static class InWorldMenuVRBuilder
             var stats = root.AddComponent<CleaningStatsAggregator>();
             var menu = root.AddComponent<InWorldMenuVR>();
             var binder = root.AddComponent<VRMenuUIBinder>();
+            root.AddComponent<VRMenuToggleInput>();
 
             SetPrivateField(audioMgr, "_mixer", mixer);
 
-            CreateCanvasHierarchy(root.transform, menu, out HelpPanelController help,
+            GameObject menuCanvas = CreateCanvasHierarchy(root.transform, menu, out HelpPanelController help,
                 out Slider sliderAmb, out Slider sliderMus, out TMP_Text statsLabel, out GameObject modalRoot,
                 out TMP_Text modalMsg, out Button modalYes, out Button modalNo,
-                out Button btnRecenter, out Button btnReset, out Button btnHelp, out Button btnExit);
+                out Button btnRecenter, out Button btnReset, out Button btnHelp, out Button btnClose, out Button btnExit);
 
             SetPrivateField(stats, "_surfaceUI", (PaintableSurfaceUI)null);
             SetPrivateField(menu, "_sliderAmbiente", sliderAmb);
@@ -182,10 +183,13 @@ public static class InWorldMenuVRBuilder
                     case "BtnRecenter": SetPrivateField(binder, "_btnRecenter", b); break;
                     case "BtnReset": SetPrivateField(binder, "_btnReset", b); break;
                     case "BtnHelp": SetPrivateField(binder, "_btnHelp", b); break;
+                    case "BtnClose": SetPrivateField(binder, "_btnClose", b); break;
                     case "BtnExit": SetPrivateField(binder, "_btnExit", b); break;
                 }
             }
         }
+
+        VRMenuSceneServices.FinalizeMenu(menuRoot);
 
         EditorUtility.SetDirty(menuRoot);
     }
@@ -218,7 +222,7 @@ public static class InWorldMenuVRBuilder
     static GameObject CreateCanvasHierarchy(Transform root, InWorldMenuVR menu, out HelpPanelController help,
         out Slider sliderAmb, out Slider sliderMus, out TMP_Text statsLabel, out GameObject modalRoot,
         out TMP_Text modalMsg, out Button modalYes, out Button modalNo,
-        out Button btnRecenter, out Button btnReset, out Button btnHelp, out Button btnExit)
+        out Button btnRecenter, out Button btnReset, out Button btnHelp, out Button btnClose, out Button btnExit)
     {
         GameObject canvasGo = new GameObject("MenuCanvas");
         canvasGo.transform.SetParent(root, false);
@@ -235,6 +239,7 @@ public static class InWorldMenuVRBuilder
 
         canvasGo.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 10f;
         canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
+        canvasGo.AddComponent<VRMenuWorldCanvasDriver>();
 
         // Panel
         GameObject panel = CreateUIObject("Panel", canvasGo.transform);
@@ -271,6 +276,7 @@ public static class InWorldMenuVRBuilder
         btnRecenter = CreateMenuButton(panel.transform, "BtnRecenter", "RECENTRAR VISTA");
         btnReset = CreateMenuButton(panel.transform, "BtnReset", "REINICIAR ESCENA");
         btnHelp = CreateMenuButton(panel.transform, "BtnHelp", "AYUDA (CONTROLES BÁSICOS)");
+        btnClose = CreateMenuButton(panel.transform, "BtnClose", "CERRAR");
         btnExit = CreateMenuButton(panel.transform, "BtnExit", "SALIR");
 
         // Help panel (sibling under canvas)

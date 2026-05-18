@@ -15,6 +15,19 @@ public class InWorldMenuPlacement : MonoBehaviour
         StartCoroutine(PlaceWhenReady());
     }
 
+    /// <summary>Repositions the menu in front of the player (e.g. when opening the menu).</summary>
+    public void TryPlaceNow()
+    {
+        XROrigin origin = _xrOrigin != null ? _xrOrigin : FindFirstObjectByType<XROrigin>();
+        Camera cam = origin != null ? origin.Camera : Camera.main;
+
+        if (origin != null && cam != null)
+            PlaceMenu(origin, cam);
+        else if (cam != null)
+            PlaceFacingCamera(transform, cam.transform.position + cam.transform.forward * 2f + Vector3.up * 0.2f,
+                cam.transform.position);
+    }
+
     IEnumerator PlaceWhenReady()
     {
         // Wait for XR Origin / camera to initialize (especially in VR play mode).
@@ -35,12 +48,10 @@ public class InWorldMenuPlacement : MonoBehaviour
         Camera fallbackCam = Camera.main;
         if (fallbackCam != null)
         {
-            Transform camT = fallbackCam.transform;
-            Vector3 worldPos = camT.position + camT.forward * 2f + Vector3.up * 0.2f;
-            Vector3 toPlayer = camT.position - worldPos;
-            toPlayer.y = 0f;
-            transform.SetPositionAndRotation(worldPos, Quaternion.LookRotation(toPlayer.normalized, Vector3.up));
-            Debug.Log($"[VRMenu] Menu colocado frente a Camera.main en {worldPos}");
+            PlaceFacingCamera(transform,
+                fallbackCam.transform.position + fallbackCam.transform.forward * 2f + Vector3.up * 0.2f,
+                fallbackCam.transform.position);
+            Debug.Log("[VRMenu] Menu colocado frente a Camera.main");
         }
         else
         {
@@ -50,15 +61,26 @@ public class InWorldMenuPlacement : MonoBehaviour
 
     void PlaceMenu(XROrigin origin, Camera cam)
     {
-        Transform originTransform = origin.transform;
-        Vector3 worldPos = originTransform.TransformPoint(_localOffset);
-
-        Vector3 toPlayer = cam.transform.position - worldPos;
-        toPlayer.y = 0f;
-        if (toPlayer.sqrMagnitude < 0.001f)
-            toPlayer = originTransform.forward;
-
-        transform.SetPositionAndRotation(worldPos, Quaternion.LookRotation(toPlayer.normalized, Vector3.up));
+        Vector3 worldPos = origin.transform.TransformPoint(_localOffset);
+        PlaceFacingCamera(transform, worldPos, cam.transform.position);
         Debug.Log($"[VRMenu] Menu colocado en {worldPos} mirando al jugador.");
+    }
+
+    static void PlaceFacingCamera(Transform root, Vector3 worldPos, Vector3 cameraPosition)
+    {
+        if (root == null)
+            return;
+
+        Vector3 flatToCamera = cameraPosition - worldPos;
+        flatToCamera.y = 0f;
+        if (flatToCamera.sqrMagnitude < 0.001f)
+            flatToCamera = Vector3.forward;
+
+        // World-space UI is drawn on -local Z; root forward should point away from the camera.
+        root.SetPositionAndRotation(worldPos, Quaternion.LookRotation(-flatToCamera.normalized, Vector3.up));
+
+        Transform canvas = root.Find("MenuCanvas");
+        if (canvas != null)
+            canvas.localRotation = Quaternion.identity;
     }
 }

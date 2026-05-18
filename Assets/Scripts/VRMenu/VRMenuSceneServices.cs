@@ -78,18 +78,51 @@ public static class VRMenuSceneServices
             SetField(fb, "_rightHaptic", right);
         }
 
-        if (binder != null)
+        WireButtons(menuRoot, menu, binder);
+    }
+
+    public static void FinalizeMenu(GameObject menuRoot)
+    {
+        if (menuRoot == null)
+            return;
+
+        EnsureEventSystem();
+        WireSceneReferences(menuRoot);
+
+        var menu = menuRoot.GetComponent<InWorldMenuVR>();
+        if (menu == null)
+            return;
+
+        Transform canvas = menuRoot.transform.Find("MenuCanvas");
+        if (canvas != null)
         {
-            SetField(binder, "_menu", menu);
-            foreach (UnityEngine.UI.Button b in menuRoot.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+            SetField(menu, "_menuCanvasRoot", canvas.gameObject);
+            VRMenuWorldCanvasDriver.RefreshCamera(canvas.gameObject);
+        }
+
+        if (menuRoot.GetComponent<VRMenuToggleInput>() == null)
+            menuRoot.AddComponent<VRMenuToggleInput>();
+
+        var binder = menuRoot.GetComponent<VRMenuUIBinder>();
+        if (binder != null)
+            binder.Bind();
+    }
+
+    static void WireButtons(GameObject menuRoot, InWorldMenuVR menu, VRMenuUIBinder binder)
+    {
+        if (binder == null)
+            return;
+
+        SetField(binder, "_menu", menu);
+        foreach (UnityEngine.UI.Button b in menuRoot.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+        {
+            switch (b.gameObject.name)
             {
-                switch (b.gameObject.name)
-                {
-                    case "BtnRecenter": SetField(binder, "_btnRecenter", b); break;
-                    case "BtnReset": SetField(binder, "_btnReset", b); break;
-                    case "BtnHelp": SetField(binder, "_btnHelp", b); break;
-                    case "BtnExit": SetField(binder, "_btnExit", b); break;
-                }
+                case "BtnRecenter": SetField(binder, "_btnRecenter", b); break;
+                case "BtnReset": SetField(binder, "_btnReset", b); break;
+                case "BtnHelp": SetField(binder, "_btnHelp", b); break;
+                case "BtnClose": SetField(binder, "_btnClose", b); break;
+                case "BtnExit": SetField(binder, "_btnExit", b); break;
             }
         }
     }

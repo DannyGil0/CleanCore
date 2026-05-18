@@ -16,6 +16,9 @@ public class HelpPanelController : MonoBehaviour
         "• Ray del mando: interactuar con este menú\n" +
         "• Joystick / stick: moverte (según rig XR)\n\n" +
         "MENÚ\n\n" +
+        "• Botón Menu del mando izquierdo (Quest): abrir/cerrar menú\n" +
+        "• Tecla M (PC): abrir/cerrar menú\n" +
+        "• CERRAR: ocultar menú\n" +
         "• Sliders: volumen ambiente y música\n" +
         "• Recenter: recentra la vista VR\n" +
         "• Reiniciar: recarga la escena actual";

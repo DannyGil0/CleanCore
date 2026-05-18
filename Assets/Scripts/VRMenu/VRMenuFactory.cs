@@ -24,12 +24,14 @@ public static class VRMenuFactory
         var menu = root.AddComponent<InWorldMenuVR>();
         root.AddComponent<InWorldMenuPlacement>();
         root.AddComponent<VRMenuUIBinder>();
+        root.AddComponent<VRMenuToggleInput>();
         var audioMgr = root.AddComponent<AudioManager>();
         var stats = root.AddComponent<CleaningStatsAggregator>();
 
         BuildCanvas(root.transform, menu, audioMgr, stats, out VRMenuUIBinder binder);
 
-        VRMenuSceneServices.WireSceneReferences(root);
+        VRMenuSceneServices.FinalizeMenu(root);
+        menu.ShowMenuWhenReady();
         return root;
     }
 
@@ -41,6 +43,7 @@ public static class VRMenuFactory
         GameObject canvasGo = new GameObject("MenuCanvas");
         canvasGo.transform.SetParent(root, false);
         canvasGo.transform.localScale = new Vector3(0.002f, 0.002f, 0.002f);
+        canvasGo.transform.localRotation = Quaternion.identity;
 
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
@@ -52,6 +55,7 @@ public static class VRMenuFactory
 
         canvasGo.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 10f;
         canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
+        canvasGo.AddComponent<VRMenuWorldCanvasDriver>();
 
         GameObject panel = CreateUIObject("Panel", canvasGo.transform);
         panel.AddComponent<Image>().color = PanelBg;
@@ -84,6 +88,7 @@ public static class VRMenuFactory
         Button btnRecenter = CreateMenuButton(panel.transform, "BtnRecenter", "RECENTRAR VISTA");
         Button btnReset = CreateMenuButton(panel.transform, "BtnReset", "REINICIAR ESCENA");
         Button btnHelp = CreateMenuButton(panel.transform, "BtnHelp", "AYUDA (CONTROLES BÁSICOS)");
+        Button btnClose = CreateMenuButton(panel.transform, "BtnClose", "CERRAR");
         Button btnExit = CreateMenuButton(panel.transform, "BtnExit", "SALIR");
 
         GameObject helpRoot = CreateUIObject("HelpPanel", canvasGo.transform);
@@ -96,6 +101,8 @@ public static class VRMenuFactory
         helpRect.offsetMin = new Vector2(40, 40);
         helpRect.offsetMax = new Vector2(-40, -40);
         TMP_Text helpText = helpTextGo.AddComponent<TextMeshProUGUI>();
+        if (TMP_Settings.defaultFontAsset != null)
+            helpText.font = TMP_Settings.defaultFontAsset;
         helpText.fontSize = 26;
         helpText.color = Color.white;
         helpText.alignment = TextAlignmentOptions.TopLeft;
@@ -128,7 +135,7 @@ public static class VRMenuFactory
         WireButtonFeedback(canvasGo.transform);
 
         menu.WireReferences(sliderAmb, sliderMus, statsLabel, modalRoot, modalMsg, modalYes, modalNo,
-            audioMgr, stats, help, btnRecenter, btnReset, btnHelp, btnExit, binder);
+            audioMgr, stats, help, btnRecenter, btnReset, btnHelp, btnExit, btnClose, canvasGo, binder);
     }
 
     static void WireButtonFeedback(Transform canvasRoot)
@@ -206,6 +213,8 @@ public static class VRMenuFactory
         GameObject textGo = CreateUIObject("Text", go.transform);
         StretchFull(textGo.GetComponent<RectTransform>());
         TMP_Text tmp = textGo.AddComponent<TextMeshProUGUI>();
+        if (TMP_Settings.defaultFontAsset != null)
+            tmp.font = TMP_Settings.defaultFontAsset;
         tmp.text = label;
         tmp.fontSize = 24;
         tmp.alignment = TextAlignmentOptions.Center;
@@ -220,6 +229,8 @@ public static class VRMenuFactory
         if (preferredHeight > 0)
             go.AddComponent<LayoutElement>().preferredHeight = preferredHeight;
         TMP_Text tmp = go.AddComponent<TextMeshProUGUI>();
+        if (TMP_Settings.defaultFontAsset != null)
+            tmp.font = TMP_Settings.defaultFontAsset;
         tmp.text = text;
         tmp.fontSize = fontSize;
         tmp.fontStyle = style;

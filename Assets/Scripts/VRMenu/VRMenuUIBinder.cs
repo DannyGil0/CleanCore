@@ -11,14 +11,17 @@ public class VRMenuUIBinder : MonoBehaviour
     [SerializeField] private Button _btnReset;
     [SerializeField] private Button _btnHelp;
     [SerializeField] private Button _btnExit;
+    [SerializeField] private Button _btnClose;
 
-    public void Wire(InWorldMenuVR menu, Button btnRecenter, Button btnReset, Button btnHelp, Button btnExit)
+    public void Wire(InWorldMenuVR menu, Button btnRecenter, Button btnReset, Button btnHelp, Button btnExit,
+        Button btnClose)
     {
         _menu = menu;
         _btnRecenter = btnRecenter;
         _btnReset = btnReset;
         _btnHelp = btnHelp;
         _btnExit = btnExit;
+        _btnClose = btnClose;
         Bind();
     }
 
@@ -29,7 +32,7 @@ public class VRMenuUIBinder : MonoBehaviour
         Bind();
     }
 
-    void Bind()
+    public void Bind()
     {
         if (_menu == null)
             return;
@@ -53,6 +56,11 @@ public class VRMenuUIBinder : MonoBehaviour
         {
             _btnExit.onClick.RemoveListener(_menu.ExitGame);
             _btnExit.onClick.AddListener(_menu.ExitGame);
+        }
+        if (_btnClose != null)
+        {
+            _btnClose.onClick.RemoveListener(_menu.CloseMenu);
+            _btnClose.onClick.AddListener(_menu.CloseMenu);
         }
     }
 }

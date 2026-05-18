@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -28,6 +29,7 @@ public class InWorldMenuVR : MonoBehaviour
     [SerializeField] private HelpPanelController _helpPanel;
 
     [Header("UI")]
+    [SerializeField] private GameObject _menuCanvasRoot;
     [SerializeField] private Slider _sliderAmbiente;
     [SerializeField] private Slider _sliderMusica;
     [SerializeField] private TMP_Text _statsLabel;
@@ -60,8 +62,11 @@ public class InWorldMenuVR : MonoBehaviour
         Button btnReset,
         Button btnHelp,
         Button btnExit,
+        Button btnClose,
+        GameObject menuCanvasRoot,
         VRMenuUIBinder binder)
     {
+        _menuCanvasRoot = menuCanvasRoot != null ? menuCanvasRoot : _menuCanvasRoot;
         _sliderAmbiente = sliderAmbiente;
         _sliderMusica = sliderMusica;
         _statsLabel = statsLabel;
@@ -75,7 +80,7 @@ public class InWorldMenuVR : MonoBehaviour
 
         if (binder != null)
         {
-            binder.Wire(menu: this, btnRecenter, btnReset, btnHelp, btnExit);
+            binder.Wire(menu: this, btnRecenter, btnReset, btnHelp, btnExit, btnClose);
         }
 
         _wired = true;
@@ -95,11 +100,60 @@ public class InWorldMenuVR : MonoBehaviour
 
         if (_modalRoot != null)
             _modalRoot.SetActive(false);
+
+        if (_menuCanvasRoot == null)
+        {
+            Transform canvas = transform.Find("MenuCanvas");
+            if (canvas != null)
+                _menuCanvasRoot = canvas.gameObject;
+        }
+
     }
 
     private void Start()
     {
         InitializeStartLogic();
+        ShowMenuWhenReady();
+    }
+
+    /// <summary>
+    /// Places the menu in front of the player and shows it (original visible-on-play behavior).
+    /// </summary>
+    public void ShowMenuWhenReady()
+    {
+        StopAllCoroutines();
+        StartCoroutine(ShowMenuWhenReadyRoutine());
+    }
+
+    IEnumerator ShowMenuWhenReadyRoutine()
+    {
+        for (int i = 0; i < 15; i++)
+        {
+            EnsureMenuCanvasReference();
+            if (_menuCanvasRoot != null)
+                break;
+            yield return null;
+        }
+
+        if (_menuCanvasRoot == null)
+        {
+            Debug.LogError("[VRMenu] MenuCanvas no encontrado en InWorldMenuVR.", this);
+            yield break;
+        }
+
+        for (int i = 0; i < 15; i++)
+        {
+            XROrigin origin = _xrOrigin != null ? _xrOrigin : FindFirstObjectByType<XROrigin>();
+            if (origin != null && origin.Camera != null)
+                break;
+            if (Camera.main != null)
+                break;
+            yield return null;
+        }
+
+        GetComponent<InWorldMenuPlacement>()?.TryPlaceNow();
+        SetMenuVisible(true);
+        Debug.Log("[VRMenu] Menu visible frente al jugador. M o boton Menu del mando = abrir/cerrar.");
     }
 
     void InitializeStartLogic()
@@ -206,6 +260,56 @@ public class InWorldMenuVR : MonoBehaviour
         if (_helpPanel == null)
             return;
         _helpPanel.Toggle();
+    }
+
+    public bool IsMenuVisible => _menuCanvasRoot != null && _menuCanvasRoot.activeSelf;
+
+    public void SetMenuVisible(bool visible)
+    {
+        EnsureMenuCanvasReference();
+
+        if (_menuCanvasRoot == null)
+        {
+            Debug.LogError("[VRMenu] No hay MenuCanvas. Ejecuta Tools > VR Menu > Add To House Interior Scene.", this);
+            return;
+        }
+
+        if (visible)
+        {
+            GetComponent<InWorldMenuPlacement>()?.TryPlaceNow();
+            VRMenuWorldCanvasDriver.RefreshCamera(_menuCanvasRoot);
+        }
+
+        _menuCanvasRoot.SetActive(visible);
+
+        if (!visible)
+        {
+            CloseModal();
+            if (_helpPanel != null && _helpPanel.IsVisible)
+                _helpPanel.Hide();
+        }
+
+        Debug.Log(visible ? "[VRMenu] Menu abierto" : "[VRMenu] Menu cerrado");
+    }
+
+    void EnsureMenuCanvasReference()
+    {
+        if (_menuCanvasRoot != null)
+            return;
+
+        Transform canvas = transform.Find("MenuCanvas");
+        if (canvas != null)
+            _menuCanvasRoot = canvas.gameObject;
+    }
+
+    public void ToggleMenuVisibility()
+    {
+        SetMenuVisible(!IsMenuVisible);
+    }
+
+    public void CloseMenu()
+    {
+        SetMenuVisible(false);
     }
 
     private void OpenModal(PendingAction action, string message)
