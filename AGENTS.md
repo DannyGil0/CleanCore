@@ -193,6 +193,19 @@ World Space settings menu for VR (not camera-locked). **Agent context (architect
 - Does **not** replace per-surface `PaintableSurfaceUI` list — both UIs coexist
 - Scene hook: **Tools → VR Menu → Add To House Interior Scene**
 
+## World Space Canvas (convenciones UI VR)
+
+Patrón compartido para menús, tableros y paneles in-world. **Agent context:** [`Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md`](Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md).
+
+| Path | Role |
+|------|------|
+| `Assets/Scripts/UI/WorldSpaceCanvasBuilder.cs` | API compartida: canvas scale 0.002, panel, TMP, layouts |
+| `Assets/Scripts/VRMenu/VRMenuWorldCanvasDriver.cs` | Asigna `canvas.worldCamera` al HMD |
+| `Assets/Scripts/VRMenu/VRMenuFactory.cs` | UI **interactiva** (botones, sliders) |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoardFactory.cs` | UI **informativa** (checklist, contador) |
+
+Regla clave: `sizeDelta` en **píxeles** (700+) + `localScale ≈ 0.002` — nunca metros con scale 1.
+
 ## Kitchen Socket System (XR Grab + Snap)
 
 Object placement system where the player grabs kitchen objects with the LEFT hand and snaps them into designated sockets. Uses XR Interaction Toolkit 3.1.3 `NearFarInteractor` + `XRGrabInteractable` + `XRSocketInteractor`.
@@ -202,17 +215,51 @@ Object placement system where the player grabs kitchen objects with the LEFT han
 | Path | Role |
 |------|------|
 | `Assets/Scripts/Kitchen/KitchenItemInteractable.cs` | Blue blink effect on unplaced objects. `SetPlaced(bool)` API. Uses `MaterialPropertyBlock` on `_BaseColor` |
-| `Assets/Scripts/Kitchen/KitchenSocketController.cs` | Subscribes to `XRSocketInteractor.selectEntered/Exited`. Controls ghost visibility + blink state |
-| `Assets/Editor/KitchenSocketSetup.cs` | **Tools > Kitchen Socket > Setup Stove Socket** — automated setup of all components |
-| `Assets/Materials/KitchenGhost.mat` | Semi-transparent blue URP/Lit material for ghost guide (auto-created by editor script) |
+| `Assets/Scripts/Kitchen/KitchenSocketController.cs` | Subscribes to `XRSocketInteractor.selectEntered/Exited`. Controls ghost visibility + blink state. Fires `static event OnPlacementChanged(objectName, placed)` |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoard.cs` | Scoreboard logic; builds UI at runtime via factory |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoardFactory.cs` | World Space canvas via `WorldSpaceCanvasBuilder` (scale 0.002, TMP, panel layout) |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoardPlacement.cs` | Fixed world position `(2, 1.6, -3)`, yaw 180° — environmental UI, does not follow player |
+| `Assets/Scripts/Kitchen/KitchenVictoryChecker.cs` | Checks all sockets placed + CleaningStatsAggregator >= 99.5% → shows victory |
+| `Assets/Editor/KitchenSocketSetup.cs` | **Tools > Kitchen Socket > Setup All Sockets** — data-driven setup for 9 objects |
+| `Assets/Materials/KitchenGhost.mat` | Semi-transparent blue URP/Lit material for ghost guide (auto-created) |
+
+### Placeable Objects (9 total)
+
+| Object Name | Original Local Pos |
+|---|---|
+| `SM_SaucePan_Black_Pan_01_90` | (2.22, -0.09, -1.38) |
+| `Kitchen_Props_B_Glass_Cup_A_106` | (3.74, -0.11, -5.47) |
+| `Kitchen_Props_B_Glass_Cup_A2_109` | (3.61, -0.11, -6.18) |
+| `Kitchen_Props_A_Blender_41` | (0.70, -0.10, -1.38) |
+| `SM_Microwave_104` | (0.41, -0.09, -4.94) |
+| `Kitchen_Props_A_Pot_B_15` | (0.87, -0.10, -2.46) |
+| `Kitchen_Props_A_Pot_A_18` | (1.57, -0.08, -1.37) |
+| `SM_BreakfastProps_Bread5` | (3.80, 0.19, -1.34) |
+| `SM_BreakfastProps_Bread_36` | (3.04, -0.05, -1.25) |
+
+All positions are LOCAL to shared parent `fileID: 1367946155`. The editor script uses `sharedParent.TransformPoint()` to get world coords.
 
 ### How It Works
 
-1. **Saucepan** (`SM_SaucePan_Black_Pan_01_90`): has `XRGrabInteractable` + `Rigidbody` + `KitchenItemInteractable`
-2. **StoveSocket** (child of `Assets_Proxy_Stove_Proxy_58`): has `XRSocketInteractor` + `SphereCollider(trigger)` + `KitchenSocketController`
-3. **GhostGuide** (child of StoveSocket): clone of saucepan mesh with transparent blue material, shows WHERE to place
-4. Player grabs saucepan with LEFT hand ray (far grab, object flies to hand), carries it to socket area, releases → snaps in place
-5. On snap: ghost hides, blink stops. On remove: ghost shows, blink restarts.
+1. **9 Objects** configured via data-driven `KitchenPlaceable[]` struct array in editor script
+2. Each object: unpacked from prefab, gets `XRGrabInteractable` + `Rigidbody` + `BoxCollider` + `KitchenItemInteractable`
+3. Each socket: `XRSocketInteractor` + `SphereCollider(trigger)` + `KitchenSocketController` + `GhostGuide`
+4. **GhostGuide**: clone of object mesh with transparent blue material at socket position (shows WHERE to place)
+5. Objects displaced `+0.5, +0.3, +0.3` from socket pos so player must grab them
+6. Player grabs with LEFT hand ray (far grab → object flies to hand), carries to socket area, releases → snaps
+7. On snap: ghost hides, blink stops, scoreboard updates. On remove: ghost shows, blink restarts
+8. **Scoreboard** (World Space Canvas at `(2, 1.6, -3)`): shows checklist, counter "X/9 acomodados"
+9. **Victory**: when all 9 placed + house 100% clean → "FELICIDADES - Casa limpia y ordenada"
+
+### Event System
+
+```csharp
+// KitchenSocketController fires on every snap/unsnap:
+public static event System.Action<string, bool> OnPlacementChanged; // (objectName, placed)
+
+// KitchenPlacementBoard subscribes to update checklist UI
+// KitchenVictoryChecker subscribes to check win condition
+```
 
 ### XRI Interaction Layers (NOT Unity Physics Layers)
 
@@ -250,22 +297,26 @@ This ensures: only LEFT hand can grab kitchen objects. Right hand is for paintin
 4. **Idempotent positioning**: Socket position is calculated as `stove.position + fixed offset (0.32, 0.54, -0.26)` — NOT from saucepan's current pos (which may already be displaced from a previous run)
 5. **Coroutine on inactive object**: `KitchenItemInteractable.StartBlinking()` guards with `if (!gameObject.activeInHierarchy) return;` to avoid errors when XRI disables objects during select/deselect lifecycle
 6. **Blink uses MaterialPropertyBlock**: NOT emission keywords (Uber Shader may not have `_EMISSION` variant compiled). Uses `_BaseColor` tint lerp instead
-7. **CurveInteractionCaster.m_RaycastMask**: Original prefab value is `2147483681` (bits 0, 5, 31). Script adds bit 6 for Environment layer. After unpacking XR Origin, this change persists as a direct scene value
-8. **XR Origin must be unpacked**: The NearFarInteractor and CurveInteractionCaster live inside nested prefabs (2+ levels deep). Modifying them via `SerializedObject` or direct property set does NOT persist unless the prefab hierarchy is fully unpacked first
+7. **Tablero legacy invisible**: Old `PlacementBoard` under `KitchenSockets` used `sizeDelta (0.6, 0.8)` + `scale 1` — text unreadable. Re-run setup; see **`Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md`**
+8. **CurveInteractionCaster.m_RaycastMask**: Original prefab value is `2147483681` (bits 0, 5, 31). Script adds bit 6 for Environment layer. After unpacking XR Origin, this change persists as a direct scene value
+9. **XR Origin must be unpacked**: The NearFarInteractor and CurveInteractionCaster live inside nested prefabs (2+ levels deep). Modifying them via `SerializedObject` or direct property set does NOT persist unless the prefab hierarchy is fully unpacked first
 
 ### Editor Script: `KitchenSocketSetup.cs`
 
-Menu: **Tools > Kitchen Socket > Setup Stove Socket**
+Menu: **Tools > Kitchen Socket > Setup All Sockets**
 
 What it does (idempotent, safe to re-run):
-1. Finds saucepan and stove by name in active scene
-2. Calculates socket world position from stove + fixed offset
-3. On saucepan: layer=0, static=off, convex collider, Rigidbody, XRGrabInteractable(Cocina), BoxCollider, KitchenItemInteractable, displaces position
-4. On stove: creates StoveSocket child with XRSocketInteractor(Cocina), SphereCollider(trigger), AttachTransform, GhostGuide, KitchenSocketController
-5. Fixes CurveInteractionCaster/SphereInteractionCaster raycast masks (adds bit 0 + bit 6)
-6. Configures hand interaction layers (left=+Cocina+farAttachNear, right=-Cocina)
-7. Creates `Assets/Materials/KitchenGhost.mat` if missing
-8. Marks scene dirty
+1. Creates/finds `KitchenSockets` root GO in scene
+2. Unpacks XR Origin prefab instance (fixes nested prefab serialization)
+3. For each of 9 `KitchenPlaceable` entries:
+   - Finds object by name, unpacks its prefab instance
+   - Sets layer=0, static=off, convex colliders, adds BoxCollider + Rigidbody + XRGrabInteractable(Cocina) + KitchenItemInteractable
+   - Creates socket under `KitchenSockets` with XRSocketInteractor + GhostGuide + KitchenSocketController
+   - Socket positioned at hardcoded world coords (from YAML), object displaced +0.5/+0.3/+0.3
+4. Fixes CurveInteractionCaster/SphereInteractionCaster raycast masks (adds bit 0 + bit 6)
+5. Configures hand interaction layers (left=+Cocina+farAttachNear, right=-Cocina)
+6. Creates `KitchenPlacementBoard` root (destroys legacy `PlacementBoard`) with placement + factory-built canvas + `KitchenVictoryChecker`
+7. Marks scene dirty
 
 ### XR Interaction Simulator Controls (Desktop Testing)
 

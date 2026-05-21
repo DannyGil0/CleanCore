@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.XR.Interaction.Toolkit;
@@ -12,55 +13,106 @@ public static class KitchenSocketSetup
 {
     const string GhostMatPath = "Assets/Materials/KitchenGhost.mat";
 
-    const string SaucePanName = "SM_SaucePan_Black_Pan_01_90";
-    const string StoveName = "Assets_Proxy_Stove_Proxy_58";
+    static readonly Vector3 DefaultDisplacement = new Vector3(0.5f, 0.3f, 0.3f);
 
-    // Hardcoded socket offset from stove (from original scene positions)
-    // Stove world: (1.90, -0.63, -1.12), Pan world: (2.22, -0.09, -1.38)
-    // These are local to the parent transform (fileID: 1367946155)
-    static readonly Vector3 SocketLocalOffsetFromStove = new Vector3(0.32f, 0.54f, -0.26f);
+    struct KitchenPlaceable
+    {
+        public string objectName;
+        public Vector3 localPos;
+        public Quaternion localRot;
+    }
 
-    // Saucepan displaced start: offset from socket position
-    static readonly Vector3 SaucePanDisplacement = new Vector3(0.5f, 0.3f, 0.3f);
+    static readonly KitchenPlaceable[] Placeables = new[]
+    {
+        new KitchenPlaceable { objectName = "SM_SaucePan_Black_Pan_01_90",
+            localPos = new Vector3(2.22f, -0.09f, -1.38f),
+            localRot = new Quaternion(0.0000009f, -0.98262787f, 0f, 0.18558699f) },
+        new KitchenPlaceable { objectName = "Kitchen_Props_B_Glass_Cup_A_106",
+            localPos = new Vector3(3.7359424f, -0.10843396f, -5.467648f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+        new KitchenPlaceable { objectName = "Kitchen_Props_B_Glass_Cup_A2_109",
+            localPos = new Vector3(3.6068883f, -0.10843396f, -6.18413f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+        new KitchenPlaceable { objectName = "Kitchen_Props_A_Blender_41",
+            localPos = new Vector3(0.70120525f, -0.09655893f, -1.3835092f),
+            localRot = new Quaternion(0f, 0.37020296f, 0f, 0.9289509f) },
+        new KitchenPlaceable { objectName = "SM_Microwave_104",
+            localPos = new Vector3(0.41122723f, -0.088722944f, -4.9434958f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+        new KitchenPlaceable { objectName = "Kitchen_Props_A_Pot_B_15",
+            localPos = new Vector3(0.87145615f, -0.09693694f, -2.461511f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+        new KitchenPlaceable { objectName = "Kitchen_Props_A_Pot_A_18",
+            localPos = new Vector3(1.568613f, -0.08332801f, -1.3698602f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+        new KitchenPlaceable { objectName = "SM_BreakfastProps_Bread5",
+            localPos = new Vector3(3.7959623f, 0.19174898f, -1.3435578f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+        new KitchenPlaceable { objectName = "SM_BreakfastProps_Bread_36",
+            localPos = new Vector3(3.038f, -0.052681923f, -1.249001f),
+            localRot = new Quaternion(0f, 0.7071068f, 0f, 0.7071068f) },
+    };
 
-    [MenuItem("Tools/Kitchen Socket/Setup Stove Socket")]
+    [MenuItem("Tools/Kitchen Socket/Setup All Sockets")]
     static void RunSetup()
     {
-        var saucePan = FindInScene(SaucePanName);
-        var stove = FindInScene(StoveName);
-
-        if (saucePan == null)
-        {
-            Debug.LogError($"[KitchenSocket] '{SaucePanName}' not found in scene.");
-            return;
-        }
-        if (stove == null)
-        {
-            Debug.LogError($"[KitchenSocket] '{StoveName}' not found in scene.");
-            return;
-        }
-
-        Undo.SetCurrentGroupName("Kitchen Socket Setup");
+        Undo.SetCurrentGroupName("Kitchen Socket Setup All");
 
         var ghostMat = GetOrCreateGhostMaterial();
 
-        // Socket position: stove world pos + fixed offset (idempotent)
-        Vector3 socketWorldPos = stove.transform.position + SocketLocalOffsetFromStove;
-        Quaternion socketWorldRot = stove.transform.rotation;
+        // Find or create sockets root
+        var socketsRoot = GameObject.Find("KitchenSockets");
+        if (socketsRoot == null)
+        {
+            socketsRoot = new GameObject("KitchenSockets");
+            Undo.RegisterCreatedObjectUndo(socketsRoot, "Create KitchenSockets");
+        }
 
-        SetupSaucePan(saucePan, socketWorldPos);
-        SetupStoveSocket(stove, saucePan, ghostMat, socketWorldPos, socketWorldRot);
+        // Unpack XR Origin first
+        UnpackXROrigin();
+
+        int configured = 0;
+        foreach (var placeable in Placeables)
+        {
+            var obj = FindInScene(placeable.objectName);
+            if (obj == null)
+            {
+                Debug.LogWarning($"[KitchenSocket] '{placeable.objectName}' not found — skipping.");
+                continue;
+            }
+
+            // Use hardcoded position as socket world pos (these are local to shared parent)
+            // The parent's world position makes these effectively world positions in this scene
+            Transform sharedParent = obj.transform.parent;
+            Vector3 socketWorldPos;
+            Quaternion socketWorldRot;
+            if (sharedParent != null)
+            {
+                socketWorldPos = sharedParent.TransformPoint(placeable.localPos);
+                socketWorldRot = sharedParent.rotation * placeable.localRot;
+            }
+            else
+            {
+                socketWorldPos = placeable.localPos;
+                socketWorldRot = placeable.localRot;
+            }
+
+            SetupGrabbable(obj, socketWorldPos);
+            SetupSocket(socketsRoot, obj, ghostMat, socketWorldPos, socketWorldRot, placeable.objectName);
+            configured++;
+        }
+
         FixNearFarInteractorRaycastMask();
         FixHandInteractionLayers();
+        CreatePlacementBoard(socketsRoot);
 
         EditorSceneManager.MarkSceneDirty(
             UnityEngine.SceneManagement.SceneManager.GetActiveScene());
-        Debug.Log("[KitchenSocket] Setup complete. Save scene to persist.");
+        Debug.Log($"[KitchenSocket] Setup complete: {configured}/{Placeables.Length} objects configured.");
     }
 
-    static void FixNearFarInteractorRaycastMask()
+    static void UnpackXROrigin()
     {
-        // Unpack XR Origin prefab so caster changes persist
         var xrOrigins = Object.FindObjectsByType<Unity.XR.CoreUtils.XROrigin>(FindObjectsSortMode.None);
         foreach (var origin in xrOrigins)
         {
@@ -68,31 +120,34 @@ public static class KitchenSocketSetup
             {
                 var root = PrefabUtility.GetOutermostPrefabInstanceRoot(origin.gameObject);
                 PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                Debug.Log($"[KitchenSocket] Unpacked XR Origin prefab instance");
+                Debug.Log("[KitchenSocket] Unpacked XR Origin");
             }
         }
+    }
 
+    static void FixNearFarInteractorRaycastMask()
+    {
         var casters = Object.FindObjectsByType<CurveInteractionCaster>(FindObjectsSortMode.None);
         foreach (var caster in casters)
         {
-            LayerMask current = caster.raycastMask;
+            int current = (int)(LayerMask)caster.raycastMask;
             int needed = current | (1 << 0) | (1 << 6);
-            if ((int)current != needed)
+            if (current != needed)
             {
                 caster.raycastMask = needed;
-                Debug.Log($"[KitchenSocket] Raycast mask fixed on {caster.gameObject.name}: {(int)current} -> {needed}");
+                Debug.Log($"[KitchenSocket] Raycast mask: {current} -> {needed} on {caster.gameObject.name}");
             }
         }
 
         var sphereCasters = Object.FindObjectsByType<SphereInteractionCaster>(FindObjectsSortMode.None);
         foreach (var caster in sphereCasters)
         {
-            LayerMask current = caster.physicsLayerMask;
+            int current = (int)(LayerMask)caster.physicsLayerMask;
             int needed = current | (1 << 0) | (1 << 6);
-            if ((int)current != needed)
+            if (current != needed)
             {
                 caster.physicsLayerMask = needed;
-                Debug.Log($"[KitchenSocket] Sphere mask fixed on {caster.gameObject.name}: {(int)current} -> {needed}");
+                Debug.Log($"[KitchenSocket] Sphere mask: {current} -> {needed} on {caster.gameObject.name}");
             }
         }
     }
@@ -100,7 +155,6 @@ public static class KitchenSocketSetup
     static void FixHandInteractionLayers()
     {
         int cocinaBit = InteractionLayerMask.GetMask("Cocina");
-
         var interactors = Object.FindObjectsByType<NearFarInteractor>(FindObjectsSortMode.None);
         foreach (var interactor in interactors)
         {
@@ -118,7 +172,7 @@ public static class KitchenSocketSetup
             {
                 int current = (int)(InteractionLayerMask)interactor.interactionLayers;
                 interactor.interactionLayers = current & ~cocinaBit;
-                Debug.Log($"[KitchenSocket] Right hand: Cocina removed");
+                Debug.Log("[KitchenSocket] Right hand: Cocina removed");
             }
             else if (isLeft)
             {
@@ -126,126 +180,108 @@ public static class KitchenSocketSetup
                 interactor.interactionLayers = current | cocinaBit;
                 interactor.enableFarCasting = true;
                 interactor.farAttachMode = InteractorFarAttachMode.Near;
-                Debug.Log($"[KitchenSocket] Left hand: Cocina added, farAttachMode=Near");
+                Debug.Log("[KitchenSocket] Left hand: Cocina + farAttachMode=Near");
             }
         }
     }
 
-    static void SetupSaucePan(GameObject pan, Vector3 socketWorldPos)
+    static void SetupGrabbable(GameObject obj, Vector3 socketWorldPos)
     {
-        // UNPACK prefab instance so all changes persist directly in scene
-        if (PrefabUtility.IsPartOfPrefabInstance(pan))
+        if (PrefabUtility.IsPartOfPrefabInstance(obj))
         {
-            var root = PrefabUtility.GetOutermostPrefabInstanceRoot(pan);
+            var root = PrefabUtility.GetOutermostPrefabInstanceRoot(obj);
             if (root != null)
             {
                 PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                Debug.Log($"[KitchenSocket] Unpacked prefab instance: {root.name}");
             }
         }
 
-        // Layer 0 (Default)
-        SetLayerRecursive(pan, 0);
-
-        // Remove static flags
-        GameObjectUtility.SetStaticEditorFlags(pan, 0);
-        foreach (Transform child in pan.GetComponentsInChildren<Transform>(true))
+        SetLayerRecursive(obj, 0);
+        GameObjectUtility.SetStaticEditorFlags(obj, 0);
+        foreach (Transform child in obj.GetComponentsInChildren<Transform>(true))
             GameObjectUtility.SetStaticEditorFlags(child.gameObject, 0);
 
-        // Make MeshColliders convex
-        var meshCols = pan.GetComponentsInChildren<MeshCollider>();
+        var meshCols = obj.GetComponentsInChildren<MeshCollider>();
         foreach (var mc in meshCols)
             mc.convex = true;
 
-        // BoxCollider on root
-        if (pan.GetComponent<Collider>() == null)
+        if (obj.GetComponent<Collider>() == null)
         {
-            var box = pan.AddComponent<BoxCollider>();
-            var renderer = pan.GetComponentInChildren<Renderer>();
+            var box = obj.AddComponent<BoxCollider>();
+            var renderer = obj.GetComponentInChildren<Renderer>();
             if (renderer != null)
             {
-                box.center = pan.transform.InverseTransformPoint(renderer.bounds.center);
+                box.center = obj.transform.InverseTransformPoint(renderer.bounds.center);
                 box.size = Vector3.Max(
                     new Vector3(
-                        Mathf.Abs(pan.transform.InverseTransformVector(renderer.bounds.size).x),
-                        Mathf.Abs(pan.transform.InverseTransformVector(renderer.bounds.size).y),
-                        Mathf.Abs(pan.transform.InverseTransformVector(renderer.bounds.size).z)),
+                        Mathf.Abs(obj.transform.InverseTransformVector(renderer.bounds.size).x),
+                        Mathf.Abs(obj.transform.InverseTransformVector(renderer.bounds.size).y),
+                        Mathf.Abs(obj.transform.InverseTransformVector(renderer.bounds.size).z)),
                     Vector3.one * 0.1f);
             }
         }
 
-        // Rigidbody
-        var rb = pan.GetComponent<Rigidbody>();
-        if (rb == null) rb = pan.AddComponent<Rigidbody>();
+        var rb = obj.GetComponent<Rigidbody>();
+        if (rb == null) rb = obj.AddComponent<Rigidbody>();
         rb.mass = 0.5f;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.useGravity = true;
         rb.isKinematic = false;
 
-        // XRGrabInteractable — Cocina ONLY so only left hand can grab
-        var grab = pan.GetComponent<XRGrabInteractable>();
-        if (grab == null) grab = pan.AddComponent<XRGrabInteractable>();
+        var grab = obj.GetComponent<XRGrabInteractable>();
+        if (grab == null) grab = obj.AddComponent<XRGrabInteractable>();
         grab.interactionLayers = InteractionLayerMask.GetMask("Cocina");
         grab.throwOnDetach = false;
 
-        // AttachPoint
-        var attachGo = pan.transform.Find("AttachPoint");
+        var attachGo = obj.transform.Find("AttachPoint");
         if (attachGo == null)
         {
             var go = new GameObject("AttachPoint");
-            go.transform.SetParent(pan.transform, false);
+            go.transform.SetParent(obj.transform, false);
             go.transform.localPosition = Vector3.zero;
             go.transform.localRotation = Quaternion.identity;
             attachGo = go.transform;
         }
         grab.attachTransform = attachGo;
 
-        // KitchenItemInteractable
-        if (pan.GetComponent<KitchenItemInteractable>() == null)
-            pan.AddComponent<KitchenItemInteractable>();
+        if (obj.GetComponent<KitchenItemInteractable>() == null)
+            obj.AddComponent<KitchenItemInteractable>();
 
-        // Position saucepan at displaced location (away from socket)
-        pan.transform.position = socketWorldPos + SaucePanDisplacement;
-
-        Debug.Log($"[KitchenSocket] SaucePan at {pan.transform.position} (socket at {socketWorldPos}). Layer={pan.layer}");
+        obj.transform.position = socketWorldPos + DefaultDisplacement;
     }
 
-    static void SetupStoveSocket(GameObject stove, GameObject saucePan, Material ghostMat,
-        Vector3 socketWorldPos, Quaternion socketWorldRot)
+    static void SetupSocket(GameObject socketsRoot, GameObject obj, Material ghostMat,
+        Vector3 socketWorldPos, Quaternion socketWorldRot, string objectName)
     {
-        var socketTf = stove.transform.Find("StoveSocket");
+        string socketName = $"Socket_{objectName}";
+        var socketTf = socketsRoot.transform.Find(socketName);
         GameObject socketGo;
         if (socketTf == null)
         {
-            socketGo = new GameObject("StoveSocket");
-            Undo.RegisterCreatedObjectUndo(socketGo, "Create StoveSocket");
-            socketGo.transform.SetParent(stove.transform, true);
+            socketGo = new GameObject(socketName);
+            socketGo.transform.SetParent(socketsRoot.transform, true);
         }
         else
         {
             socketGo = socketTf.gameObject;
         }
 
-        // Socket always at the fixed stove-top position
         socketGo.transform.position = socketWorldPos;
         socketGo.transform.rotation = socketWorldRot;
 
-        // XRSocketInteractor — Cocina layer
         var socket = socketGo.GetComponent<XRSocketInteractor>();
-        if (socket == null) socket = Undo.AddComponent<XRSocketInteractor>(socketGo);
+        if (socket == null) socket = socketGo.AddComponent<XRSocketInteractor>();
         socket.interactionLayers = InteractionLayerMask.GetMask("Cocina");
 
         var col = socketGo.GetComponent<SphereCollider>();
-        if (col == null) col = Undo.AddComponent<SphereCollider>(socketGo);
+        if (col == null) col = socketGo.AddComponent<SphereCollider>();
         col.isTrigger = true;
         col.radius = 0.2f;
 
-        // AttachTransform
         var attachTf = socketGo.transform.Find("AttachTransform");
         if (attachTf == null)
         {
             var go = new GameObject("AttachTransform");
-            Undo.RegisterCreatedObjectUndo(go, "Create AttachTransform");
             go.transform.SetParent(socketGo.transform, false);
             go.transform.localPosition = Vector3.zero;
             go.transform.localRotation = Quaternion.identity;
@@ -253,13 +289,12 @@ public static class KitchenSocketSetup
         }
         socket.attachTransform = attachTf;
 
-        // GhostGuide — visual hint at socket position
+        // GhostGuide
         var ghostTf = socketGo.transform.Find("GhostGuide");
         GameObject ghostGo;
         if (ghostTf == null)
         {
             ghostGo = new GameObject("GhostGuide");
-            Undo.RegisterCreatedObjectUndo(ghostGo, "Create GhostGuide");
             ghostGo.transform.SetParent(socketGo.transform, false);
             ghostGo.transform.localPosition = Vector3.zero;
             ghostGo.transform.localRotation = Quaternion.identity;
@@ -271,7 +306,7 @@ public static class KitchenSocketSetup
             ghostGo.transform.localRotation = Quaternion.identity;
         }
 
-        var srcFilter = saucePan.GetComponentInChildren<MeshFilter>();
+        var srcFilter = obj.GetComponentInChildren<MeshFilter>();
         if (srcFilter != null)
         {
             var gf = ghostGo.GetComponent<MeshFilter>();
@@ -287,22 +322,41 @@ public static class KitchenSocketSetup
 
         // KitchenSocketController
         var controller = socketGo.GetComponent<KitchenSocketController>();
-        if (controller == null) controller = Undo.AddComponent<KitchenSocketController>(socketGo);
+        if (controller == null) controller = socketGo.AddComponent<KitchenSocketController>();
 
         var so = new SerializedObject(controller);
         so.FindProperty("_trackedItem").objectReferenceValue =
-            saucePan.GetComponent<KitchenItemInteractable>();
+            obj.GetComponent<KitchenItemInteractable>();
         so.FindProperty("_guideVisual").objectReferenceValue = ghostGo;
+        so.FindProperty("_objectName").stringValue = objectName;
         so.ApplyModifiedProperties();
-
-        Debug.Log($"[KitchenSocket] Socket+Ghost at {socketWorldPos}");
     }
 
-    static void SetLayerRecursive(GameObject go, int layer)
+    static void CreatePlacementBoard(GameObject socketsRoot)
     {
-        go.layer = layer;
-        foreach (Transform child in go.GetComponentsInChildren<Transform>(true))
-            child.gameObject.layer = layer;
+        // Remove legacy board (wrong canvas scale / parented under KitchenSockets).
+        var legacy = socketsRoot.transform.Find("PlacementBoard");
+        if (legacy != null)
+            Undo.DestroyObjectImmediate(legacy.gameObject);
+
+        var existing = GameObject.Find("KitchenPlacementBoard");
+        if (existing != null)
+            Undo.DestroyObjectImmediate(existing);
+
+        var boardGo = new GameObject("KitchenPlacementBoard");
+        Undo.RegisterCreatedObjectUndo(boardGo, "Create Kitchen Placement Board");
+        boardGo.transform.SetPositionAndRotation(new Vector3(2f, 1.6f, -3f), Quaternion.Euler(0f, 180f, 0f));
+
+        var placement = boardGo.AddComponent<KitchenPlacementBoardPlacement>();
+        var placementSo = new SerializedObject(placement);
+        placementSo.FindProperty("_worldPosition").vector3Value = new Vector3(2f, 1.6f, -3f);
+        placementSo.FindProperty("_yawDegrees").floatValue = 180f;
+        placementSo.ApplyModifiedPropertiesWithoutUndo();
+
+        boardGo.AddComponent<KitchenPlacementBoard>();
+        boardGo.AddComponent<KitchenVictoryChecker>();
+
+        Debug.Log("[KitchenSocket] KitchenPlacementBoard created at (2, 1.6, -3) — re-run if an old PlacementBoard still exists.");
     }
 
     static Material GetOrCreateGhostMaterial()
@@ -331,6 +385,13 @@ public static class KitchenSocketSetup
         AssetDatabase.SaveAssets();
         Debug.Log($"[KitchenSocket] Created ghost material at {GhostMatPath}");
         return mat;
+    }
+
+    static void SetLayerRecursive(GameObject go, int layer)
+    {
+        go.layer = layer;
+        foreach (Transform child in go.GetComponentsInChildren<Transform>(true))
+            child.gameObject.layer = layer;
     }
 
     static GameObject FindInScene(string name)

@@ -9,6 +9,12 @@ namespace CleanCore.Kitchen
     {
         [SerializeField] private KitchenItemInteractable _trackedItem;
         [SerializeField] private GameObject _guideVisual;
+        [SerializeField] private string _objectName;
+
+        public static event System.Action<string, bool> OnPlacementChanged;
+
+        public string ObjectName => _objectName;
+        public bool IsPlaced { get; private set; }
 
         private XRSocketInteractor _socket;
 
@@ -31,18 +37,22 @@ namespace CleanCore.Kitchen
 
         private void OnSnapEnter(SelectEnterEventArgs args)
         {
+            IsPlaced = true;
             if (_guideVisual != null)
                 _guideVisual.SetActive(false);
             if (_trackedItem != null)
                 _trackedItem.SetPlaced(true);
+            OnPlacementChanged?.Invoke(_objectName, true);
         }
 
         private void OnSnapExit(SelectExitEventArgs args)
         {
+            IsPlaced = false;
             if (_guideVisual != null)
                 _guideVisual.SetActive(true);
             if (_trackedItem != null)
                 _trackedItem.SetPlaced(false);
+            OnPlacementChanged?.Invoke(_objectName, false);
         }
     }
 }
