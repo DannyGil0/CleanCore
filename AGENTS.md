@@ -193,6 +193,75 @@ World Space settings menu for VR (not camera-locked). **Agent context (architect
 - Does **not** replace per-surface `PaintableSurfaceUI` list — both UIs coexist
 - Scene hook: **Tools → VR Menu → Add To House Interior Scene**
 
+## Audio System (Música y Ambiente)
+
+### Archivos
+
+| Path | Rol |
+|------|-----|
+| `Assets/Scripts/VRMenu/AudioManager.cs` | Singleton. Convierte slider lineal (0–1) a dB y lo aplica al AudioMixer. Guarda valor en `PlayerPrefs` |
+| `Assets/Audio/MainMixer.mixer` | AudioMixer con grupos `Musica` y `Ambiente`. Params expuestos: `VolMusica`, `VolAmbiente` |
+| `Assets/Editor/InWorldMenuVRBuilder.cs` | **Tools → VR Menu → Create Audio Mixer Asset** lo crea automáticamente |
+
+### Cómo funciona
+
+```
+AudioSource (MusicPlayer)
+  └── Output → MainMixer/Musica
+
+AudioManager._mixer = MainMixer
+  ├── SetMusicaVolume(0-1)  → mixer.SetFloat("VolMusica",  dB)
+  └── SetAmbienteVolume(0-1) → mixer.SetFloat("VolAmbiente", dB)
+
+Menú VR → slider "VOLUMEN MÚSICA" → AudioManager.SetMusicaVolume(value)
+```
+
+### Setup completo (para un agente que lo implemente desde cero)
+
+**1. Crear el AudioMixer** (automático):
+```
+Tools → VR Menu → Create Audio Mixer Asset
+```
+Crea `Assets/Audio/MainMixer.mixer` con grupos `Musica` y `Ambiente` y expone los parámetros.
+Si falla (reflection interna de Unity), crear manualmente:
+- **Assets → Create → Audio Mixer** → nombre `MainMixer`, guardar en `Assets/Audio/`
+- En la ventana Audio Mixer: crear grupos `Musica` y `Ambiente` hijos de `Master`
+- Clic derecho en cada knob Volume → **Expose to script** → renombrar exactamente `VolMusica` / `VolAmbiente`
+
+**2. Importar el clip de música**:
+- Arrastrar `.ogg` / `.mp3` / `.wav` a `Assets/Audio/`
+- Inspector: `Load Type = Streaming`, `Compression Format = Vorbis`
+
+**3. Crear el reproductor en escena**:
+- Crear GameObject vacío → nombre `MusicPlayer`
+- Añadir `AudioSource`:
+  - `AudioClip` → tu clip
+  - `Output` → grupo `Musica` del `MainMixer`
+  - `Play On Awake` ✓, `Loop` ✓, `Spatial Blend = 0` (2D)
+
+**4. Conectar el mixer al AudioManager**:
+El `AudioManager` se añade en runtime al root `InWorldMenuVR` (vía `VRMenuFactory`). La asignación ocurre en el editor a través de `InWorldMenuVRBuilder.EnsureMainMixer()`. Para que funcione sin prefab guardado, carga el mixer desde `Resources`:
+- Copia o mueve `MainMixer.mixer` a `Assets/Resources/MainMixer.mixer`
+- O ejecuta **Tools → VR Menu → Create InWorld Menu Prefab** que asigna `_mixer` vía reflection
+
+### Nombres de parámetros (crítico)
+
+Los nombres deben coincidir exactamente en el AudioMixer y en `AudioManager`:
+```csharp
+public const string ParamVolAmbiente = "VolAmbiente";
+public const string ParamVolMusica   = "VolMusica";
+```
+Si se cambia un nombre en el mixer, cambiarlo también en `AudioManager.cs`.
+
+### Errores frecuentes
+
+| Error | Causa | Solución |
+|-------|-------|----------|
+| Slider no cambia volumen | `_mixer` es null en `AudioManager` | Asignar mixer via prefab o `Resources.Load` |
+| Sin audio en Play | `AudioSource.Output` no asignado al grupo | Verificar `Output` → `MainMixer/Musica` |
+| Volumen siempre al mínimo | Nombre de parámetro expuesto diferente al código | Revisar exactamente `VolMusica` / `VolAmbiente` |
+| `SetFloat` sin efecto | El grupo de audio no está expuesto (solo visible en editor) | Exponer Volume via clic derecho → "Expose to script" |
+
 ## World Space Canvas (convenciones UI VR)
 
 Patrón compartido para menús, tableros y paneles in-world. **Agent context:** [`Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md`](Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md).

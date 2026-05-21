@@ -160,6 +160,71 @@ flowchart TB
 
 ---
 
+## AudioManager — Setup de música y sonido ambiente
+
+### Estado por defecto del proyecto
+
+`AudioManager` ya existe y está cableado al menú VR. Lo que puede faltar:
+- El archivo `Assets/Audio/MainMixer.mixer` (si no se ejecutó el builder)
+- Un `AudioSource` reproduciendo música en la escena
+- La referencia `_mixer` asignada al componente en runtime
+
+### Crear el mixer (automático)
+
+```
+Tools → VR Menu → Create Audio Mixer Asset
+```
+
+Esto llama a `InWorldMenuVRBuilder.EnsureMainMixer()` que crea el mixer, agrega grupos `Musica` y `Ambiente`, y expone los parámetros `VolMusica` / `VolAmbiente` via reflection de `UnityEditor.Audio`.
+
+Si falla (Unity no expone esa API en la versión instalada), crearlo **manualmente**:
+1. **Assets → Create → Audio Mixer** → guardar como `Assets/Audio/MainMixer.mixer`
+2. En la ventana **Audio Mixer**: crear dos grupos hijos del Master: `Musica`, `Ambiente`
+3. En cada grupo, clic derecho sobre el knob de **Volume** → **Expose 'Volume' to script**
+4. En la columna **Exposed Parameters** (arriba a la derecha), renombrar exactamente: `VolMusica` y `VolAmbiente`
+
+### Agregar música a la escena
+
+1. Importar clip a `Assets/Audio/` — formato `.ogg` recomendado (`Streaming` + `Vorbis`)
+2. Crear `GameObject` vacío → `MusicPlayer`
+3. Añadir **AudioSource**:
+   - `AudioClip` → clip importado
+   - `Output` → grupo **Musica** del `MainMixer`
+   - `Play On Awake` ✓ · `Loop` ✓ · `Spatial Blend = 0`
+
+Para sonido ambiente (ventilación, pájaros, etc.) repetir con output al grupo **Ambiente**.
+
+### Conexión mixer ↔ AudioManager en runtime
+
+`VRMenuFactory` crea el `AudioManager` con `AddComponent<AudioManager>()`. El campo `[SerializeField] private AudioMixer _mixer` queda null porque no hay Inspector. Opciones:
+
+| Opción | Cuándo usar |
+|--------|-------------|
+| **Tools → VR Menu → Create InWorld Menu Prefab** | Genera prefab con `_mixer` asignado. La factory usa ese prefab al play |
+| Copiar mixer a `Assets/Resources/MainMixer.mixer` y cargar con `Resources.Load<AudioMixer>("MainMixer")` en factory | Sin prefab guardado |
+| Asignar manualmente si hay un `InWorldMenuVR` persistente en escena | Escenas con menú pre-instanciado |
+
+### Diagrama de flujo de audio
+
+```
+clip.ogg → AudioSource (Loop)
+              └── Output: MainMixer / Musica
+                            ↑
+                 AudioManager.SetMusicaVolume(v)
+                   mixer.SetFloat("VolMusica", dB)
+                            ↑
+                 Slider "VOLUMEN MÚSICA" en menú VR
+                   InWorldMenuVR._sliderMusica.onValueChanged
+```
+
+### Qué no hacer (agentes)
+
+- No cambiar los nombres de los parámetros expuestos (`VolMusica`, `VolAmbiente`) sin actualizar también `AudioManager.cs`.
+- No poner el `AudioSource` en el mismo GO que `AudioManager` (vive en `InWorldMenuVR`, que se destruye y recrea).
+- No usar `AudioListener.volume` como fallback — afecta todo el audio incluyendo SFX de limpieza.
+
+---
+
 ## Integración con limpieza
 
 - **House Cleaning Setup** (`Assets/Editor/HouseCleaningSetup.cs`) — fases 0–5 para `PaintableSurface`, materiales Uber, UI superficies.
