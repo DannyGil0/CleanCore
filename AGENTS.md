@@ -193,6 +193,98 @@ World Space settings menu for VR (not camera-locked). **Agent context (architect
 - Does **not** replace per-surface `PaintableSurfaceUI` list — both UIs coexist
 - Scene hook: **Tools → VR Menu → Add To House Interior Scene**
 
+## Kitchen Socket System (XR Grab + Snap)
+
+Object placement system where the player grabs kitchen objects with the LEFT hand and snaps them into designated sockets. Uses XR Interaction Toolkit 3.1.3 `NearFarInteractor` + `XRGrabInteractable` + `XRSocketInteractor`.
+
+### Architecture
+
+| Path | Role |
+|------|------|
+| `Assets/Scripts/Kitchen/KitchenItemInteractable.cs` | Blue blink effect on unplaced objects. `SetPlaced(bool)` API. Uses `MaterialPropertyBlock` on `_BaseColor` |
+| `Assets/Scripts/Kitchen/KitchenSocketController.cs` | Subscribes to `XRSocketInteractor.selectEntered/Exited`. Controls ghost visibility + blink state |
+| `Assets/Editor/KitchenSocketSetup.cs` | **Tools > Kitchen Socket > Setup Stove Socket** — automated setup of all components |
+| `Assets/Materials/KitchenGhost.mat` | Semi-transparent blue URP/Lit material for ghost guide (auto-created by editor script) |
+
+### How It Works
+
+1. **Saucepan** (`SM_SaucePan_Black_Pan_01_90`): has `XRGrabInteractable` + `Rigidbody` + `KitchenItemInteractable`
+2. **StoveSocket** (child of `Assets_Proxy_Stove_Proxy_58`): has `XRSocketInteractor` + `SphereCollider(trigger)` + `KitchenSocketController`
+3. **GhostGuide** (child of StoveSocket): clone of saucepan mesh with transparent blue material, shows WHERE to place
+4. Player grabs saucepan with LEFT hand ray (far grab, object flies to hand), carries it to socket area, releases → snaps in place
+5. On snap: ghost hides, blink stops. On remove: ghost shows, blink restarts.
+
+### XRI Interaction Layers (NOT Unity Physics Layers)
+
+Configured in `Assets/XRI/Settings/Resources/InteractionLayerSettings.asset`:
+- Layer 0 = "Default" (all standard interactions)
+- Layer 1 = "Cocina" (kitchen grab/socket filter)
+- Layer 31 = "Teleport"
+
+| Component | interactionLayers |
+|-----------|------------------|
+| Left NearFarInteractor | all layers (includes Cocina) |
+| Right NearFarInteractor | all layers EXCEPT Cocina |
+| XRGrabInteractable (saucepan) | Cocina ONLY |
+| XRSocketInteractor (stove) | Cocina ONLY |
+
+This ensures: only LEFT hand can grab kitchen objects. Right hand is for painting/cleaning only.
+
+### Unity Physics Layers
+
+- Layer 0 = Default — saucepan lives here (NearFarInteractor raycast mask includes bit 0)
+- Layer 6 = Environment — paintable surfaces (Painter.cs raycasts this layer)
+- Layer 7 = Cocina — registered in TagManager but NOT used for physics filtering (XRI interaction layers handle separation)
+
+### NearFarInteractor Configuration (Left Hand)
+
+- `enableFarCasting = true` — ray casts far to detect objects
+- `farAttachMode = InteractorFarAttachMode.Near` — grabbed object FLIES TO HAND (not stays at distance)
+- `CurveInteractionCaster.raycastMask` must include bit 0 (Default) and bit 6 (Environment)
+
+### Known Issues & Gotchas
+
+1. **Prefab instance modifications**: ~~Changes require `PrefabUtility.RecordPrefabInstancePropertyModifications()`~~ **SOLVED by unpacking**: The editor script now calls `PrefabUtility.UnpackPrefabInstance(..., Completely)` on both the saucepan and XR Origin before modifying them. This converts them to regular scene objects so all property changes (layer, collider, raycast mask) persist directly in the .unity scene file. Without unpacking, nested prefab overrides silently revert on Play.
+2. **Non-convex MeshCollider + Rigidbody**: Unity silently ignores non-convex mesh colliders on objects with Rigidbody. Script forces `convex = true`
+3. **Static flags**: Objects with static flags cannot move with Rigidbody. Script clears all static flags on saucepan
+4. **Idempotent positioning**: Socket position is calculated as `stove.position + fixed offset (0.32, 0.54, -0.26)` — NOT from saucepan's current pos (which may already be displaced from a previous run)
+5. **Coroutine on inactive object**: `KitchenItemInteractable.StartBlinking()` guards with `if (!gameObject.activeInHierarchy) return;` to avoid errors when XRI disables objects during select/deselect lifecycle
+6. **Blink uses MaterialPropertyBlock**: NOT emission keywords (Uber Shader may not have `_EMISSION` variant compiled). Uses `_BaseColor` tint lerp instead
+7. **CurveInteractionCaster.m_RaycastMask**: Original prefab value is `2147483681` (bits 0, 5, 31). Script adds bit 6 for Environment layer. After unpacking XR Origin, this change persists as a direct scene value
+8. **XR Origin must be unpacked**: The NearFarInteractor and CurveInteractionCaster live inside nested prefabs (2+ levels deep). Modifying them via `SerializedObject` or direct property set does NOT persist unless the prefab hierarchy is fully unpacked first
+
+### Editor Script: `KitchenSocketSetup.cs`
+
+Menu: **Tools > Kitchen Socket > Setup Stove Socket**
+
+What it does (idempotent, safe to re-run):
+1. Finds saucepan and stove by name in active scene
+2. Calculates socket world position from stove + fixed offset
+3. On saucepan: layer=0, static=off, convex collider, Rigidbody, XRGrabInteractable(Cocina), BoxCollider, KitchenItemInteractable, displaces position
+4. On stove: creates StoveSocket child with XRSocketInteractor(Cocina), SphereCollider(trigger), AttachTransform, GhostGuide, KitchenSocketController
+5. Fixes CurveInteractionCaster/SphereInteractionCaster raycast masks (adds bit 0 + bit 6)
+6. Configures hand interaction layers (left=+Cocina+farAttachNear, right=-Cocina)
+7. Creates `Assets/Materials/KitchenGhost.mat` if missing
+8. Marks scene dirty
+
+### XR Interaction Simulator Controls (Desktop Testing)
+
+- **T** = activate left controller
+- **Y** = activate right controller  
+- **Mouse** = aim controller
+- **G** = Grip (Select action = grab)
+- **Left Click** = Trigger (Activate action)
+
+### Namespace References
+
+```csharp
+using UnityEngine.XR.Interaction.Toolkit;                    // InteractionLayerMask, SelectEnterEventArgs
+using UnityEngine.XR.Interaction.Toolkit.Attachment;         // InteractorFarAttachMode
+using UnityEngine.XR.Interaction.Toolkit.Interactors;        // NearFarInteractor, XRSocketInteractor
+using UnityEngine.XR.Interaction.Toolkit.Interactors.Casters; // CurveInteractionCaster, SphereInteractionCaster
+using UnityEngine.XR.Interaction.Toolkit.Interactables;      // XRGrabInteractable
+```
+
 ## Key Constraints
 
 - **UV1 is mandatory** — `_DirtMask` samples via `staticLightmapUV` (UV1). Without `generateSecondaryUV = true` on FBX imports, painting won't map correctly.
