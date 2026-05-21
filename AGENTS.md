@@ -193,6 +193,218 @@ World Space settings menu for VR (not camera-locked). **Agent context (architect
 - Does **not** replace per-surface `PaintableSurfaceUI` list — both UIs coexist
 - Scene hook: **Tools → VR Menu → Add To House Interior Scene**
 
+## Audio System (Música y Ambiente)
+
+### Archivos
+
+| Path | Rol |
+|------|-----|
+| `Assets/Scripts/VRMenu/AudioManager.cs` | Singleton. Convierte slider lineal (0–1) a dB y lo aplica al AudioMixer. Guarda valor en `PlayerPrefs` |
+| `Assets/Audio/MainMixer.mixer` | AudioMixer con grupos `Musica` y `Ambiente`. Params expuestos: `VolMusica`, `VolAmbiente` |
+| `Assets/Editor/InWorldMenuVRBuilder.cs` | **Tools → VR Menu → Create Audio Mixer Asset** lo crea automáticamente |
+
+### Cómo funciona
+
+```
+AudioSource (MusicPlayer)
+  └── Output → MainMixer/Musica
+
+AudioManager._mixer = MainMixer
+  ├── SetMusicaVolume(0-1)  → mixer.SetFloat("VolMusica",  dB)
+  └── SetAmbienteVolume(0-1) → mixer.SetFloat("VolAmbiente", dB)
+
+Menú VR → slider "VOLUMEN MÚSICA" → AudioManager.SetMusicaVolume(value)
+```
+
+### Setup completo (para un agente que lo implemente desde cero)
+
+**1. Crear el AudioMixer** (automático):
+```
+Tools → VR Menu → Create Audio Mixer Asset
+```
+Crea `Assets/Audio/MainMixer.mixer` con grupos `Musica` y `Ambiente` y expone los parámetros.
+Si falla (reflection interna de Unity), crear manualmente:
+- **Assets → Create → Audio Mixer** → nombre `MainMixer`, guardar en `Assets/Audio/`
+- En la ventana Audio Mixer: crear grupos `Musica` y `Ambiente` hijos de `Master`
+- Clic derecho en cada knob Volume → **Expose to script** → renombrar exactamente `VolMusica` / `VolAmbiente`
+
+**2. Importar el clip de música**:
+- Arrastrar `.ogg` / `.mp3` / `.wav` a `Assets/Audio/`
+- Inspector: `Load Type = Streaming`, `Compression Format = Vorbis`
+
+**3. Crear el reproductor en escena**:
+- Crear GameObject vacío → nombre `MusicPlayer`
+- Añadir `AudioSource`:
+  - `AudioClip` → tu clip
+  - `Output` → grupo `Musica` del `MainMixer`
+  - `Play On Awake` ✓, `Loop` ✓, `Spatial Blend = 0` (2D)
+
+**4. Conectar el mixer al AudioManager**:
+El `AudioManager` se añade en runtime al root `InWorldMenuVR` (vía `VRMenuFactory`). La asignación ocurre en el editor a través de `InWorldMenuVRBuilder.EnsureMainMixer()`. Para que funcione sin prefab guardado, carga el mixer desde `Resources`:
+- Copia o mueve `MainMixer.mixer` a `Assets/Resources/MainMixer.mixer`
+- O ejecuta **Tools → VR Menu → Create InWorld Menu Prefab** que asigna `_mixer` vía reflection
+
+### Nombres de parámetros (crítico)
+
+Los nombres deben coincidir exactamente en el AudioMixer y en `AudioManager`:
+```csharp
+public const string ParamVolAmbiente = "VolAmbiente";
+public const string ParamVolMusica   = "VolMusica";
+```
+Si se cambia un nombre en el mixer, cambiarlo también en `AudioManager.cs`.
+
+### Errores frecuentes
+
+| Error | Causa | Solución |
+|-------|-------|----------|
+| Slider no cambia volumen | `_mixer` es null en `AudioManager` | Asignar mixer via prefab o `Resources.Load` |
+| Sin audio en Play | `AudioSource.Output` no asignado al grupo | Verificar `Output` → `MainMixer/Musica` |
+| Volumen siempre al mínimo | Nombre de parámetro expuesto diferente al código | Revisar exactamente `VolMusica` / `VolAmbiente` |
+| `SetFloat` sin efecto | El grupo de audio no está expuesto (solo visible en editor) | Exponer Volume via clic derecho → "Expose to script" |
+
+## World Space Canvas (convenciones UI VR)
+
+Patrón compartido para menús, tableros y paneles in-world. **Agent context:** [`Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md`](Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md).
+
+| Path | Role |
+|------|------|
+| `Assets/Scripts/UI/WorldSpaceCanvasBuilder.cs` | API compartida: canvas scale 0.002, panel, TMP, layouts |
+| `Assets/Scripts/VRMenu/VRMenuWorldCanvasDriver.cs` | Asigna `canvas.worldCamera` al HMD |
+| `Assets/Scripts/VRMenu/VRMenuFactory.cs` | UI **interactiva** (botones, sliders) |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoardFactory.cs` | UI **informativa** (checklist, contador) |
+
+Regla clave: `sizeDelta` en **píxeles** (700+) + `localScale ≈ 0.002` — nunca metros con scale 1.
+
+## Kitchen Socket System (XR Grab + Snap)
+
+Object placement system where the player grabs kitchen objects with the LEFT hand and snaps them into designated sockets. Uses XR Interaction Toolkit 3.1.3 `NearFarInteractor` + `XRGrabInteractable` + `XRSocketInteractor`.
+
+### Architecture
+
+| Path | Role |
+|------|------|
+| `Assets/Scripts/Kitchen/KitchenItemInteractable.cs` | Blue blink effect on unplaced objects. `SetPlaced(bool)` API. Uses `MaterialPropertyBlock` on `_BaseColor` |
+| `Assets/Scripts/Kitchen/KitchenSocketController.cs` | Subscribes to `XRSocketInteractor.selectEntered/Exited`. Controls ghost visibility + blink state. Fires `static event OnPlacementChanged(objectName, placed)` |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoard.cs` | Scoreboard logic; builds UI at runtime via factory |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoardFactory.cs` | World Space canvas via `WorldSpaceCanvasBuilder` (scale 0.002, TMP, panel layout) |
+| `Assets/Scripts/Kitchen/KitchenPlacementBoardPlacement.cs` | Fixed world position `(2, 1.6, -3)`, yaw 180° — environmental UI, does not follow player |
+| `Assets/Scripts/Kitchen/KitchenVictoryChecker.cs` | Checks all sockets placed + CleaningStatsAggregator >= 99.5% → shows victory |
+| `Assets/Editor/KitchenSocketSetup.cs` | **Tools > Kitchen Socket > Setup All Sockets** — data-driven setup for 9 objects |
+| `Assets/Materials/KitchenGhost.mat` | Semi-transparent blue URP/Lit material for ghost guide (auto-created) |
+
+### Placeable Objects (9 total)
+
+| Object Name | Original Local Pos |
+|---|---|
+| `SM_SaucePan_Black_Pan_01_90` | (2.22, -0.09, -1.38) |
+| `Kitchen_Props_B_Glass_Cup_A_106` | (3.74, -0.11, -5.47) |
+| `Kitchen_Props_B_Glass_Cup_A2_109` | (3.61, -0.11, -6.18) |
+| `Kitchen_Props_A_Blender_41` | (0.70, -0.10, -1.38) |
+| `SM_Microwave_104` | (0.41, -0.09, -4.94) |
+| `Kitchen_Props_A_Pot_B_15` | (0.87, -0.10, -2.46) |
+| `Kitchen_Props_A_Pot_A_18` | (1.57, -0.08, -1.37) |
+| `SM_BreakfastProps_Bread5` | (3.80, 0.19, -1.34) |
+| `SM_BreakfastProps_Bread_36` | (3.04, -0.05, -1.25) |
+
+All positions are LOCAL to shared parent `fileID: 1367946155`. The editor script uses `sharedParent.TransformPoint()` to get world coords.
+
+### How It Works
+
+1. **9 Objects** configured via data-driven `KitchenPlaceable[]` struct array in editor script
+2. Each object: unpacked from prefab, gets `XRGrabInteractable` + `Rigidbody` + `BoxCollider` + `KitchenItemInteractable`
+3. Each socket: `XRSocketInteractor` + `SphereCollider(trigger)` + `KitchenSocketController` + `GhostGuide`
+4. **GhostGuide**: clone of object mesh with transparent blue material at socket position (shows WHERE to place)
+5. Objects displaced `+0.5, +0.3, +0.3` from socket pos so player must grab them
+6. Player grabs with LEFT hand ray (far grab → object flies to hand), carries to socket area, releases → snaps
+7. On snap: ghost hides, blink stops, scoreboard updates. On remove: ghost shows, blink restarts
+8. **Scoreboard** (World Space Canvas at `(2, 1.6, -3)`): shows checklist, counter "X/9 acomodados"
+9. **Victory**: when all 9 placed + house 100% clean → "FELICIDADES - Casa limpia y ordenada"
+
+### Event System
+
+```csharp
+// KitchenSocketController fires on every snap/unsnap:
+public static event System.Action<string, bool> OnPlacementChanged; // (objectName, placed)
+
+// KitchenPlacementBoard subscribes to update checklist UI
+// KitchenVictoryChecker subscribes to check win condition
+```
+
+### XRI Interaction Layers (NOT Unity Physics Layers)
+
+Configured in `Assets/XRI/Settings/Resources/InteractionLayerSettings.asset`:
+- Layer 0 = "Default" (all standard interactions)
+- Layer 1 = "Cocina" (kitchen grab/socket filter)
+- Layer 31 = "Teleport"
+
+| Component | interactionLayers |
+|-----------|------------------|
+| Left NearFarInteractor | all layers (includes Cocina) |
+| Right NearFarInteractor | all layers EXCEPT Cocina |
+| XRGrabInteractable (saucepan) | Cocina ONLY |
+| XRSocketInteractor (stove) | Cocina ONLY |
+
+This ensures: only LEFT hand can grab kitchen objects. Right hand is for painting/cleaning only.
+
+### Unity Physics Layers
+
+- Layer 0 = Default — saucepan lives here (NearFarInteractor raycast mask includes bit 0)
+- Layer 6 = Environment — paintable surfaces (Painter.cs raycasts this layer)
+- Layer 7 = Cocina — registered in TagManager but NOT used for physics filtering (XRI interaction layers handle separation)
+
+### NearFarInteractor Configuration (Left Hand)
+
+- `enableFarCasting = true` — ray casts far to detect objects
+- `farAttachMode = InteractorFarAttachMode.Near` — grabbed object FLIES TO HAND (not stays at distance)
+- `CurveInteractionCaster.raycastMask` must include bit 0 (Default) and bit 6 (Environment)
+
+### Known Issues & Gotchas
+
+1. **Prefab instance modifications**: ~~Changes require `PrefabUtility.RecordPrefabInstancePropertyModifications()`~~ **SOLVED by unpacking**: The editor script now calls `PrefabUtility.UnpackPrefabInstance(..., Completely)` on both the saucepan and XR Origin before modifying them. This converts them to regular scene objects so all property changes (layer, collider, raycast mask) persist directly in the .unity scene file. Without unpacking, nested prefab overrides silently revert on Play.
+2. **Non-convex MeshCollider + Rigidbody**: Unity silently ignores non-convex mesh colliders on objects with Rigidbody. Script forces `convex = true`
+3. **Static flags**: Objects with static flags cannot move with Rigidbody. Script clears all static flags on saucepan
+4. **Idempotent positioning**: Socket position is calculated as `stove.position + fixed offset (0.32, 0.54, -0.26)` — NOT from saucepan's current pos (which may already be displaced from a previous run)
+5. **Coroutine on inactive object**: `KitchenItemInteractable.StartBlinking()` guards with `if (!gameObject.activeInHierarchy) return;` to avoid errors when XRI disables objects during select/deselect lifecycle
+6. **Blink uses MaterialPropertyBlock**: NOT emission keywords (Uber Shader may not have `_EMISSION` variant compiled). Uses `_BaseColor` tint lerp instead
+7. **Tablero legacy invisible**: Old `PlacementBoard` under `KitchenSockets` used `sizeDelta (0.6, 0.8)` + `scale 1` — text unreadable. Re-run setup; see **`Docs/WORLD_SPACE_CANVAS_AGENT_CONTEXT.md`**
+8. **CurveInteractionCaster.m_RaycastMask**: Original prefab value is `2147483681` (bits 0, 5, 31). Script adds bit 6 for Environment layer. After unpacking XR Origin, this change persists as a direct scene value
+9. **XR Origin must be unpacked**: The NearFarInteractor and CurveInteractionCaster live inside nested prefabs (2+ levels deep). Modifying them via `SerializedObject` or direct property set does NOT persist unless the prefab hierarchy is fully unpacked first
+
+### Editor Script: `KitchenSocketSetup.cs`
+
+Menu: **Tools > Kitchen Socket > Setup All Sockets**
+
+What it does (idempotent, safe to re-run):
+1. Creates/finds `KitchenSockets` root GO in scene
+2. Unpacks XR Origin prefab instance (fixes nested prefab serialization)
+3. For each of 9 `KitchenPlaceable` entries:
+   - Finds object by name, unpacks its prefab instance
+   - Sets layer=0, static=off, convex colliders, adds BoxCollider + Rigidbody + XRGrabInteractable(Cocina) + KitchenItemInteractable
+   - Creates socket under `KitchenSockets` with XRSocketInteractor + GhostGuide + KitchenSocketController
+   - Socket positioned at hardcoded world coords (from YAML), object displaced +0.5/+0.3/+0.3
+4. Fixes CurveInteractionCaster/SphereInteractionCaster raycast masks (adds bit 0 + bit 6)
+5. Configures hand interaction layers (left=+Cocina+farAttachNear, right=-Cocina)
+6. Creates `KitchenPlacementBoard` root (destroys legacy `PlacementBoard`) with placement + factory-built canvas + `KitchenVictoryChecker`
+7. Marks scene dirty
+
+### XR Interaction Simulator Controls (Desktop Testing)
+
+- **T** = activate left controller
+- **Y** = activate right controller  
+- **Mouse** = aim controller
+- **G** = Grip (Select action = grab)
+- **Left Click** = Trigger (Activate action)
+
+### Namespace References
+
+```csharp
+using UnityEngine.XR.Interaction.Toolkit;                    // InteractionLayerMask, SelectEnterEventArgs
+using UnityEngine.XR.Interaction.Toolkit.Attachment;         // InteractorFarAttachMode
+using UnityEngine.XR.Interaction.Toolkit.Interactors;        // NearFarInteractor, XRSocketInteractor
+using UnityEngine.XR.Interaction.Toolkit.Interactors.Casters; // CurveInteractionCaster, SphereInteractionCaster
+using UnityEngine.XR.Interaction.Toolkit.Interactables;      // XRGrabInteractable
+```
+
 ## Key Constraints
 
 - **UV1 is mandatory** — `_DirtMask` samples via `staticLightmapUV` (UV1). Without `generateSecondaryUV = true` on FBX imports, painting won't map correctly.

@@ -40,26 +40,12 @@ public static class VRMenuFactory
     {
         binder = root.GetComponent<VRMenuUIBinder>();
 
-        GameObject canvasGo = new GameObject("MenuCanvas");
-        canvasGo.transform.SetParent(root, false);
-        canvasGo.transform.localScale = new Vector3(0.002f, 0.002f, 0.002f);
-        canvasGo.transform.localRotation = Quaternion.identity;
-
-        Canvas canvas = canvasGo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        canvas.sortingOrder = 20;
-        canvas.worldCamera = Camera.main;
-
-        RectTransform canvasRect = canvasGo.GetComponent<RectTransform>();
-        canvasRect.sizeDelta = new Vector2(1000, 650);
-
-        canvasGo.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 10f;
-        canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
-        canvasGo.AddComponent<VRMenuWorldCanvasDriver>();
+        GameObject canvasGo = WorldSpaceCanvasBuilder.CreateCanvas(
+            root, "MenuCanvas", new Vector2(1000, 650), sortingOrder: 20, interactive: true);
 
         GameObject panel = CreateUIObject("Panel", canvasGo.transform);
         panel.AddComponent<Image>().color = PanelBg;
-        StretchFull(panel.GetComponent<RectTransform>());
+        WorldSpaceCanvasBuilder.StretchFull(panel.GetComponent<RectTransform>());
         var panelRect = panel.GetComponent<RectTransform>();
         panelRect.offsetMin = new Vector2(20, 20);
         panelRect.offsetMax = new Vector2(-20, -20);
@@ -92,12 +78,12 @@ public static class VRMenuFactory
         Button btnExit = CreateMenuButton(panel.transform, "BtnExit", "SALIR");
 
         GameObject helpRoot = CreateUIObject("HelpPanel", canvasGo.transform);
-        StretchFull(helpRoot.GetComponent<RectTransform>());
+        WorldSpaceCanvasBuilder.StretchFull(helpRoot.GetComponent<RectTransform>());
         helpRoot.AddComponent<Image>().color = new Color(0.1f, 0.2f, 0.25f, 0.85f);
         helpRoot.SetActive(false);
         GameObject helpTextGo = CreateUIObject("HelpText", helpRoot.transform);
         var helpRect = helpTextGo.GetComponent<RectTransform>();
-        StretchFull(helpRect);
+        WorldSpaceCanvasBuilder.StretchFull(helpRect);
         helpRect.offsetMin = new Vector2(40, 100);
         helpRect.offsetMax = new Vector2(-40, -40);
         TMP_Text helpText = helpTextGo.AddComponent<TextMeshProUGUI>();
@@ -112,7 +98,7 @@ public static class VRMenuFactory
         help.Configure(helpRoot, helpText, btnHelpBack);
 
         GameObject modalRoot = CreateUIObject("ModalOverlay", canvasGo.transform);
-        StretchFull(modalRoot.GetComponent<RectTransform>());
+        WorldSpaceCanvasBuilder.StretchFull(modalRoot.GetComponent<RectTransform>());
         modalRoot.AddComponent<Image>().color = new Color(0, 0, 0, 0.55f);
         modalRoot.SetActive(false);
 
