@@ -9,6 +9,12 @@ public class Painter : MonoBehaviour
     public float Range = 10;
     public LayerMask LayerMask;
 
+    [Header("Visual Effects")]
+    public ParticleSystem sprayEffect;
+    public ParticleSystem impactEffect;
+
+    private bool _isFiring = false;
+
     [Header("VR Controllers")]
     public Transform leftController;
     public Transform rightController;
@@ -22,6 +28,13 @@ public class Painter : MonoBehaviour
     private void Awake()
     {
         _transform = this.transform;
+    }
+
+    private void Start()
+    {
+        // Forzar detención y limpieza de las partículas al iniciar para evitar disparos involuntarios
+        if (sprayEffect != null) sprayEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        if (impactEffect != null) impactEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     private void OnEnable()
@@ -44,7 +57,23 @@ public class Painter : MonoBehaviour
         if (!fire1) fire1 = Input.GetButton("Fire1");
         if (!fire2) fire2 = Input.GetButton("Fire2");
 
-        if (!fire1 && !fire2)
+        bool isCurrentlyFiring = fire1 || fire2;
+
+        if (isCurrentlyFiring != _isFiring)
+        {
+            _isFiring = isCurrentlyFiring;
+            if (_isFiring)
+            {
+                if (sprayEffect != null) sprayEffect.Play(true);
+            }
+            else
+            {
+                if (sprayEffect != null) sprayEffect.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                if (impactEffect != null) impactEffect.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            }
+        }
+
+        if (!isCurrentlyFiring)
             return;
 
         // Usa el controlador correspondiente o la cámara como fallback
@@ -55,7 +84,17 @@ public class Painter : MonoBehaviour
         origin.GetPositionAndRotation(out Vector3 position, out Quaternion rotation);
 
         if (!Physics.Raycast(position, rotation * Vector3.forward, out RaycastHit hit, this.Range, this.LayerMask))
+        {
+            if (impactEffect != null && impactEffect.isPlaying)
+                impactEffect.Stop(true, ParticleSystemStopBehavior.StopEmitting);
             return;
+        }
+
+        if (impactEffect != null)
+        {
+            impactEffect.transform.SetPositionAndRotation(hit.point, Quaternion.LookRotation(hit.normal));
+            if (!impactEffect.isPlaying) impactEffect.Play(true);
+        }
 
         int hits = Physics.OverlapSphereNonAlloc(hit.point, this.SpreadRadius, COLLIDERS, this.LayerMask);
         for (int i = 0; i < hits; i++)
