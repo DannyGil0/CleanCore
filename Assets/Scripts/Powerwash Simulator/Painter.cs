@@ -23,6 +23,12 @@ public class Painter : MonoBehaviour
     public InputActionReference fire1Action;
     public InputActionReference fire2Action;
 
+    [Tooltip("Si esta marcado, fire2 (mano izquierda) NO dispara agua. La mano izquierda queda libre para menus / agarrar objetos.")]
+    public bool disableFire2 = true;
+
+    [Tooltip("Si esta marcado, ignora completamente el Input Manager legacy (Fire1/Fire2 = mouse). Recomendado en VR para que el click izquierdo NO dispare agua al interactuar con menus.")]
+    public bool ignoreLegacyMouseInput = true;
+
     private Transform _transform;
 
     private void Awake()
@@ -53,10 +59,13 @@ public class Painter : MonoBehaviour
     private void Update()
     {
         bool fire1 = fire1Action != null && fire1Action.action.IsPressed();
-        bool fire2 = fire2Action != null && fire2Action.action.IsPressed();
+        bool fire2 = !disableFire2 && fire2Action != null && fire2Action.action.IsPressed();
 
-        if (!fire1) fire1 = Input.GetButton("Fire1");
-        if (!fire2) fire2 = Input.GetButton("Fire2");
+        if (!ignoreLegacyMouseInput)
+        {
+            if (!fire1) fire1 = Input.GetButton("Fire1");
+            if (!disableFire2 && !fire2) fire2 = Input.GetButton("Fire2");
+        }
 
         bool isCurrentlyFiring = fire1 || fire2;
 
