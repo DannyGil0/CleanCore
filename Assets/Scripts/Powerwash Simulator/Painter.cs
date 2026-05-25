@@ -28,13 +28,14 @@ public class Painter : MonoBehaviour
     private void Awake()
     {
         _transform = this.transform;
+
+        // Forzar detención y limpieza de las partículas al iniciar para evitar disparos involuntarios (movido a Awake para máxima prioridad)
+        if (sprayEffect != null) sprayEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        if (impactEffect != null) impactEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     private void Start()
     {
-        // Forzar detención y limpieza de las partículas al iniciar para evitar disparos involuntarios
-        if (sprayEffect != null) sprayEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-        if (impactEffect != null) impactEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     private void OnEnable()
